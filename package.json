@@ -1,0 +1,33 @@
+{
+  "name": "cricketverse",
+  "version": "1.0.0",
+  "main": "index.js",
+  "scripts": {
+    "start": "node server/server.js",
+    "dev": "node server/server.js",
+    "compile": "hardhat compile",
+    "test": "hardhat test",
+    "chain:node": "hardhat node",
+    "chain:accounts": "node scripts/show_demo_accounts.js",
+    "chain:deploy": "hardhat run scripts/deploy_full_ecosystem.js --network localhost",
+    "chain:deploy:amoy": "hardhat run scripts/deploy_full_ecosystem.js --network amoy",
+    "cards:register-all": "hardhat run scripts/register_all_player_cards.js --network localhost",
+    "cards:register-all:amoy": "hardhat run scripts/register_all_player_cards.js --network amoy"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "description": "",
+  "devDependencies": {
+    "@nomicfoundation/hardhat-toolbox": "^5.0.0",
+    "hardhat": "^2.29.1"
+  },
+  "dependencies": {
+    "@openzeppelin/contracts": "^5.6.1",
+    "cors": "^2.8.6",
+    "dotenv": "^18.0.5",
+    "ethers": "^6.17.0",
+    "express": "^5.2.1"
+  },
+  "type": "module"
+}

@@ -1,0 +1,520 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>CricketVerse | Premier Cricket Arena</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800;900&family=JetBrains+Mono:wght@400;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body class="cricket-day-theme">
+  <aside id="local-file-notice" role="alert" hidden style="position:fixed;inset:0;z-index:99999;background:rgba(3,12,22,.92);display:none;align-items:center;justify-content:center;padding:24px;color:#f8fafc;font-family:system-ui,sans-serif">
+    <div style="max-width:620px;padding:32px;border:1px solid #24506b;border-radius:20px;background:#102a42;box-shadow:0 24px 80px #0008">
+      <p style="margin:0 0 10px;color:#33d6b0;font-weight:800;letter-spacing:.12em">CRICKETVERSE SETUP</p>
+      <h1 style="margin:0 0 12px;font-size:30px">Open the running website</h1>
+      <p style="line-height:1.6;color:#c6d5e2">This page was opened as a file, so the player data, blockchain contracts, and wallet connection cannot load. Start the app server from the project folder with <code>npm start</code>, then open the app from the server:</p>
+      <p style="margin:22px 0"><a href="http://localhost:3000" style="display:inline-block;padding:12px 18px;border-radius:10px;background:#33d6b0;color:#071a2d;font-weight:800;text-decoration:none">Open CricketVerse at http://localhost:3000</a></p>
+      <p style="margin:0;color:#a9bdce;font-size:14px">For wallet demos, use Chrome with MetaMask. The in-app browser cannot use Chrome extensions.</p>
+    </div>
+  </aside>
+  <script>
+    if (location.protocol === "file:") {
+      const notice = document.getElementById("local-file-notice");
+      notice.hidden = false;
+      notice.style.display = "flex";
+    }
+  </script>
+  <!-- Top Header -->
+  <header class="app-header">
+    <div class="header-left">
+      <div class="brand-logo">
+        <div class="logo-text">
+          <span class="logo-title">CricketVerse</span>
+          <span class="logo-badge">Cricket collectibles</span>
+        </div>
+      </div>
+      <div class="network-badge">
+        <span class="pulse-dot"></span>
+        <span id="network-name">Local Hardhat · Wallet Not Connected</span>
+      </div>
+    </div>
+
+    <div class="header-right">
+      <button id="connect-wallet-btn" class="btn btn-primary">Connect Wallet</button>
+      <button id="wallet-help-btn" class="wallet-help-btn" type="button">Wallet setup</button>
+      <button id="demo-gas-btn" class="btn btn-outline" type="button" disabled hidden title="Top this wallet up to 20 local Hardhat ETH. Local demo only.">Get 20 demo ETH</button>
+      <button id="faucet-btn" class="btn btn-outline glow-faucet" disabled>Claim 50,000 CRIC</button>
+
+      <div class="wallet-badge">
+        <div class="cric-balance-box">
+          <span class="token-sym">Balance:</span>
+          <span id="user-cric-balance" class="balance-val">0.00</span>
+          <span class="token-currency-label">CRIC</span>
+        </div>
+        <span id="wallet-address" class="wallet-select">Not connected</span>
+      </div>
+    </div>
+  </header>
+
+  <!-- Main Cricket Arena Layout -->
+  <main class="main-layout">
+    <!-- Navigation Tabs -->
+    <nav class="sub-nav">
+      <button class="nav-tab active" data-tab="cards">
+        The Pavilion
+      </button>
+      <button class="nav-tab" data-tab="collection">
+        My Collection
+      </button>
+      <button class="nav-tab" data-tab="marketplace">
+        Auction Room
+      </button>
+      <button class="nav-tab" data-tab="fantasy">
+        Matchday XI
+      </button>
+      <button class="nav-tab" data-tab="tickets">
+        Stadium Passes
+      </button>
+      <button class="nav-tab" data-tab="polls">
+        Fan Polls
+      </button>
+      <button class="nav-tab" data-tab="tournaments">
+        Tournament Arena
+      </button>
+    </nav>
+
+    <!-- SECTION 1: The Pavilion | Player Cards -->
+    <section id="section-cards" class="view-panel active">
+      <div class="section-hero">
+        <div class="hero-header-flex">
+          <div>
+            <span class="hero-kicker">COLLECTIBLES</span>
+            <h1 class="hero-title">Player cards</h1>
+            <p class="hero-sub">Collect your cricket greats.</p>
+          </div>
+        </div>
+
+        <div class="filters-search-bar">
+          <div class="filter-pills">
+            <button class="pill active" data-filter="all">All Squad</button>
+            <button class="pill" data-filter="Legendary">Legendary</button>
+            <button class="pill" data-filter="Epic">Epic</button>
+            <button class="pill" data-filter="Rare">Rare</button>
+            <button class="pill" data-filter="Uncommon">Uncommon</button>
+            <button class="pill" data-filter="Common">Common</button>
+          </div>
+          <div class="search-box-wrapper">
+              <input type="text" id="pavilion-search-input" class="input-search" placeholder="Search players…">
+          </div>
+        </div>
+      </div>
+
+      <div id="cards-grid" class="cards-grid">
+        <!-- Rendered via JavaScript -->
+      </div>
+      
+      <div id="cards-pagination" class="pagination-controls">
+        <!-- Pagination rendered here -->
+      </div>
+    </section>
+
+    <!-- SECTION 2: My Collection | Collected Cards Vault -->
+    <section id="section-collection" class="view-panel">
+      <div class="section-hero">
+        <div class="hero-header-flex">
+          <div>
+            <span class="hero-kicker">PORTFOLIO</span>
+            <h2 class="hero-title">My collection</h2>
+          </div>
+        </div>
+
+        <div class="market-stats">
+          <div class="mstat-card">
+            <span class="mstat-label">Cards Owned</span>
+            <span id="user-total-cards" class="mstat-val text-green">0</span>
+          </div>
+          <div class="mstat-card">
+            <span class="mstat-label">Vault Valuation</span>
+            <span id="user-portfolio-value" class="mstat-val text-blue">0 CRIC</span>
+          </div>
+          <div class="mstat-card">
+            <span class="mstat-label">Rarest Tier</span>
+            <span id="user-rarest-tier" class="mstat-val text-accent">Legendary</span>
+          </div>
+        </div>
+      </div>
+
+      <div id="collection-cards-grid" class="cards-grid">
+        <!-- Rendered via JavaScript -->
+      </div>
+    </section>
+
+    <!-- SECTION 3: The Auction Room | Marketplace -->
+    <section id="section-marketplace" class="view-panel">
+      <div class="section-hero">
+        <div class="hero-header-flex">
+          <div>
+            <span class="hero-kicker">MARKETPLACE</span>
+            <h2 class="hero-title">Marketplace</h2>
+          </div>
+        </div>
+        <div class="market-stats">
+          <div class="mstat-card">
+            <span class="mstat-label">Currency</span>
+            <span class="mstat-val text-blue">CRIC Tokens</span>
+          </div>
+          <div class="mstat-card">
+            <span class="mstat-label">Creator Royalties</span>
+            <span class="mstat-val text-green">5% Auto-Routed</span>
+          </div>
+          <div class="mstat-card">
+            <span class="mstat-label">Ticket Protection</span>
+            <span class="mstat-val text-red">Fair Resale Cap</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Put Card in Auction Form -->
+      <div class="auction-listing-card">
+        <div class="auction-form-header">
+          <h3 class="panel-heading">Put a Card into the Auction</h3>
+            <p class="panel-sub">Set a price and list an owned asset.</p>
+        </div>
+        <div class="auction-form-row">
+          <div class="form-group flex-2">
+            <label class="form-label">Your asset</label>
+            <select id="auction-card-select" class="form-control">
+              <!-- Populated dynamically with user's collected cards -->
+            </select>
+          </div>
+          <div class="form-group flex-1">
+            <label class="form-label">Price (CRIC)</label>
+            <input type="number" id="auction-price-input" class="form-control" placeholder="e.g. 750" min="50" step="25">
+          </div>
+          <div class="form-group flex-btn">
+            <button id="submit-auction-listing-btn" class="btn btn-primary btn-block">
+              List for Auction
+            </button>
+          </div>
+        </div>
+        <div id="auction-royalty-preview" class="auction-payout-preview">
+          <span>Seller Proceeds (95%): <b id="seller-proceeds-val">0 CRIC</b></span>
+          <span style="margin-left: 20px;">Creator Royalty (5%): <b id="royalty-fee-val">0 CRIC</b></span>
+        </div>
+      </div>
+
+      <div class="marketplace-header-row">
+        <h3 class="subheading" style="margin-bottom: 16px;">Active Auction Listings</h3>
+      </div>
+
+      <div id="marketplace-list" class="marketplace-grid">
+        <!-- Marketplace listings rendered here -->
+      </div>
+    </section>
+
+    <!-- SECTION 3: Matchday XI | Fantasy Squad Builder -->
+    <section id="section-fantasy" class="view-panel">
+      <div class="fantasy-dashboard-layout">
+        <!-- Left: Squad Builder -->
+        <div class="fantasy-builder-card">
+          <div class="builder-header">
+            <div>
+              <span class="hero-kicker">SQUAD STRATEGY</span>
+              <h2 class="title-md">Build Your Playing XI</h2>
+            <p class="sub-sm">Choose 11 players from today’s 22-player match squad.</p>
+            </div>
+            <div class="salary-cap-box">
+            <span class="salary-label">Match squad</span>
+              <div class="salary-meter">
+                <div id="salary-progress-bar" class="salary-bar-fill" style="width: 0%;"></div>
+              </div>
+              <span id="salary-credits-display" class="salary-number">Load today’s match players</span>
+            </div>
+          </div>
+
+          <div class="role-requirements-tracker" hidden>
+            <span id="badge-wk" class="role-req">WK: 0/1</span>
+            <span id="badge-bat" class="role-req">BAT: 0/3</span>
+            <span id="badge-bowl" class="role-req">BOWL: 0/3</span>
+            <span id="badge-ar" class="role-req">AR: 0/1</span>
+            <span id="badge-total" class="role-req total-badge">Playing XI: 0/11</span>
+          </div>
+
+          <div class="roster-pool-controls">
+            <input type="text" id="player-search" class="input-search" placeholder="Search the 22 players in this match…">
+            <button id="auto-squad-btn" class="btn btn-sm btn-ghost" hidden>Auto-Pick Balanced XI</button>
+            <button id="clear-squad-btn" class="btn btn-sm btn-danger-outline">Clear</button>
+          </div>
+
+          <div id="player-picker-list" class="player-picker-list">
+            <!-- Scrollable player selection list -->
+          </div>
+        </div>
+
+        <!-- Right: Live Match Simulator -->
+        <div class="fantasy-simulation-card">
+          <div class="sim-header">
+            <div>
+            <span class="live-tag">LIVE MATCH</span>
+              <h3 id="fantasy-match-title" class="title-md">Choose a match</h3>
+            </div>
+            <button id="simulate-over-btn" class="btn btn-primary pulse-btn" disabled>
+              Refresh live points
+            </button>
+          </div>
+
+          <div class="roster-pool-controls">
+            <label for="matchday-match-select" class="sub-sm">Today’s matches</label>
+            <select id="matchday-match-select" class="form-control"><option value="">Loading matches…</option></select>
+            <span id="matchday-api-status" class="sub-sm text-dim" role="status">Waiting for live cricket data…</span>
+          </div>
+
+          <!-- Formula Matrix -->
+          <div class="scoring-rules-banner">
+            <div class="rule-chip">Run: <b>+1</b></div>
+            <div class="rule-chip">Four (4s): <b>+1</b></div>
+            <div class="rule-chip">Six (6s): <b>+2</b></div>
+            <div class="rule-chip">Wicket: <b>+20</b></div>
+            <div class="rule-chip">Catch: <b>+8</b></div>
+            <div class="rule-chip">Fifty: <b>+10</b></div>
+            <div class="rule-chip">Century: <b>+25</b></div>
+          </div>
+
+          <!-- Live Feed Commentary -->
+          <div class="telemetry-feed-box">
+            <div class="feed-header">MATCH COMMENTARY</div>
+            <div id="latest-commentary" class="commentary-content">
+              Select 11 players; match points refresh from the live score feed.
+            </div>
+          </div>
+
+          <!-- Real-Time Fantasy Leaderboard -->
+          <div class="squad-points-overview">
+            <div class="points-header">
+              <span>Fantasy points</span>
+              <span id="squad-total-points" class="total-pts-badge">0.0 Pts</span>
+            </div>
+            <div id="selected-squad-breakdown" class="squad-pts-list">
+              <p class="empty-state">Pick players on the left to inspect real-time fantasy score breakdown.</p>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- SECTION 4: Stadium Passes -->
+    <section id="section-tickets" class="view-panel">
+      <div class="tickets-layout">
+        <!-- Left: Ticket Catalog & Price Checker -->
+        <div class="ticket-manager-col">
+          <div class="section-hero">
+            <div>
+              <span class="hero-kicker">TICKETING</span>
+              <h2 class="hero-title">Stadium Gate Passes</h2>
+              <p class="hero-sub">Tickets with a fair resale limit.</p>
+            </div>
+          </div>
+
+          <div class="filter-pills ticket-filters" role="group" aria-label="Filter tickets by fixture time">
+            <button class="pill active" data-ticket-filter="all">All</button>
+            <button class="pill" data-ticket-filter="LIVE">Live</button>
+            <button class="pill" data-ticket-filter="UPCOMING">Upcoming</button>
+            <button class="pill" data-ticket-filter="PAST">Past</button>
+          </div>
+
+          <div id="ticket-issuer-panel" class="organizer-panel" hidden>
+            <h3>Issue a ticket</h3>
+            <form id="ticket-issue-form" class="organizer-form-grid">
+              <input id="ticket-recipient" class="form-input" placeholder="Recipient wallet (blank = yours)" aria-label="Recipient wallet">
+              <input id="ticket-token-id" class="form-input" type="number" min="1" placeholder="Ticket ID" required aria-label="Ticket ID">
+              <input id="ticket-match-id" class="form-input" type="number" min="1" placeholder="Fixture ID" required aria-label="Fixture ID">
+              <input id="ticket-match-name" class="form-input" placeholder="Fixture name" required aria-label="Fixture name">
+              <input id="ticket-venue" class="form-input" placeholder="Venue" required aria-label="Venue">
+              <input id="ticket-stand" class="form-input" placeholder="Stand" required aria-label="Stand">
+              <input id="ticket-seat" class="form-input" placeholder="Seat" required aria-label="Seat">
+              <input id="ticket-face-value" class="form-input" type="number" min="1" placeholder="Face value · CRIC" required aria-label="Face value in CRIC">
+              <label class="sub-sm">Starts <input id="ticket-start-time" class="form-input" type="datetime-local" required></label>
+              <label class="sub-sm">Ends <input id="ticket-end-time" class="form-input" type="datetime-local" required></label>
+              <button class="btn btn-primary" type="submit">Issue on-chain ticket</button>
+            </form>
+          </div>
+
+          <div class="tickets-grid" id="stadium-tickets-list">
+            <!-- Tickets rendered here -->
+          </div>
+
+          <!-- Fair Price Auditor -->
+          <div class="anti-scalp-test-card">
+            <h3 class="card-title">Resale price check</h3>
+            
+            <div class="resale-input-group">
+              <div class="form-row">
+                <label>Stadium pass</label>
+                <select id="verify-ticket-select" class="form-select">
+                  <option value="101">Pass #101: Narendra Modi Stadium VIP (Face: 200 CRIC | Max Resale: 230 CRIC)</option>
+                  <option value="102">Pass #102: East Upper Stand (Face: 80 CRIC | Max Resale: 92 CRIC)</option>
+                </select>
+              </div>
+
+              <div class="form-row">
+                <label>Resale price (CRIC)</label>
+                <div class="input-with-button">
+                  <input type="number" id="test-resale-price" class="form-input" placeholder="e.g. 240" value="250">
+              <button id="run-scalp-check-btn" class="btn btn-accent">Check price</button>
+                </div>
+              </div>
+            </div>
+
+            <div id="scalp-check-result" class="scalp-result-box hidden">
+              <!-- Result displayed here -->
+            </div>
+          </div>
+        </div>
+
+        <!-- Right: Turnstile Scanner -->
+        <div class="gatekeeper-col">
+          <div class="gatekeeper-card">
+            <div class="gate-header">
+              <div>
+                <h3 class="card-title">Ticket scanner</h3>
+              </div>
+            </div>
+
+            <div class="qr-scanner-sim">
+              <div class="scanner-frame">
+                <div class="scan-laser"></div>
+                <div id="qr-target-display" class="qr-placeholder">
+                  <div class="qr-matrix-sim">
+                    <div class="qr-code-text">CV-TKT-101</div>
+                  </div>
+                </div>
+              </div>
+              <label class="sub-sm" for="ticket-scan-payload">Ticket QR</label>
+              <input id="ticket-scan-payload" class="form-input" placeholder="Scan or paste ticket data" autocomplete="off">
+              <video id="ticket-qr-video" playsinline muted style="display:none; width:100%; margin-top:8px; border-radius:8px;"></video>
+              <button id="camera-scan-btn" class="btn btn-outline btn-block" type="button">Open QR Camera</button>
+              <button id="gatekeeper-scan-btn" class="btn btn-success btn-block">Verify entry</button>
+            </div>
+
+            <div id="gatekeeper-log" class="gate-log-box">
+            <div class="log-title">Entry log</div>
+              <div id="log-messages" class="log-entries">
+                <div class="log-entry info">Scanner ready</div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- SECTION 5: Superfan Dugout | Polls -->
+    <section id="section-polls" class="view-panel">
+      <div class="section-hero">
+        <div>
+          <span class="hero-kicker">COMMUNITY</span>
+          <h2 class="hero-title">Fan polls</h2>
+        </div>
+      </div>
+
+      <div id="poll-create-panel" class="organizer-panel" hidden>
+        <h3>Create a poll</h3>
+        <form id="poll-create-form" class="organizer-form-grid">
+          <input id="poll-question" class="form-input" placeholder="Question" required aria-label="Poll question">
+          <input id="poll-options" class="form-input" placeholder="Options, separated by commas" required aria-label="Poll options">
+          <label class="sub-sm">Closes <input id="poll-close-time" class="form-input" type="datetime-local" required></label>
+          <button class="btn btn-primary" type="submit">Create on-chain poll</button>
+        </form>
+      </div>
+
+      <div id="polls-list" class="polls-grid">
+        <!-- Rendered polls -->
+      </div>
+    </section>
+
+    <!-- SECTION 6: Tournament Arena | Leagues -->
+    <section id="section-tournaments" class="view-panel">
+      <div class="section-hero">
+        <div>
+          <span class="hero-kicker">FANTASY LEAGUES</span>
+          <h2 class="hero-title">Tournaments</h2>
+        </div>
+      </div>
+
+      <div id="tournament-create-panel" class="organizer-panel" hidden>
+        <h3>Create a tournament</h3>
+        <form id="tournament-create-form" class="organizer-form-grid">
+          <input id="tournament-name" class="form-input" placeholder="Tournament name" required aria-label="Tournament name">
+          <input id="tournament-match-id" class="form-input" type="number" min="1" placeholder="Fixture ID" required aria-label="Fixture ID">
+          <input id="tournament-entry-fee" class="form-input" type="number" min="1" placeholder="Entry · CRIC" required aria-label="Entry fee in CRIC">
+          <input id="tournament-max-entries" class="form-input" type="number" min="2" placeholder="Entry limit" required aria-label="Entry limit">
+          <label class="sub-sm">Locks <input id="tournament-lock-time" class="form-input" type="datetime-local" required></label>
+          <button class="btn btn-primary" type="submit">Create on-chain tournament</button>
+        </form>
+      </div>
+
+      <div class="tournament-layout">
+        <div class="tournament-pools-col">
+          <h3 class="panel-heading">Active Contests</h3>
+          <div id="tournament-list" class="tournament-grid">
+            <!-- Dynamically populated -->
+          </div>
+        </div>
+
+        <div class="tournament-leaderboard-col">
+          <div class="panel-card">
+            <div class="leaderboard-header">
+              <div>
+                <h3 class="panel-heading">Tournament entries</h3>
+              </div>
+              <span class="badge-live-feed">On-chain</span>
+            </div>
+          <label class="sub-sm" for="tournament-leaderboard-select">Show entries and prizes</label>
+          <select id="tournament-leaderboard-select" class="form-select"></select>
+            <div class="table-wrap">
+              <table class="leaderboard-table">
+                <thead>
+                  <tr>
+                    <th>Entry</th>
+                    <th>Wallet</th>
+                    <th>Squad commitment</th>
+                    <th>Points</th>
+                    <th>Payout</th>
+                  </tr>
+                </thead>
+                <tbody id="leaderboard-tbody">
+                  <!-- Populated dynamically -->
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <!-- Toast Notification Container -->
+  <div id="toast-container" class="toast-container"></div>
+
+  <div id="wallet-help-modal" class="wallet-help-modal" hidden role="dialog" aria-modal="true" aria-labelledby="wallet-help-title">
+    <div class="wallet-help-content">
+      <button id="wallet-help-close" class="wallet-help-close" type="button" aria-label="Close wallet setup">×</button>
+      <span class="hero-kicker">WALLET SETUP</span>
+      <h2 id="wallet-help-title">Connect MetaMask</h2>
+      <p>CricketVerse needs a wallet extension to sign blockchain transactions.</p>
+      <a class="btn btn-primary wallet-install-link" href="https://metamask.io/download/" target="_blank" rel="noopener noreferrer">Install MetaMask</a>
+      <ol>
+        <li>Install MetaMask here, then create or unlock a wallet.</li>
+        <li>Start the local Hardhat node and deploy the demo contracts if they are not already running.</li>
+        <li>Open this site in Chrome with MetaMask. Click Connect Wallet and approve the local network switch.</li>
+        <li>On the local demo, click <strong>Get 20 demo ETH</strong>, then claim 1,000 CRIC in each demo wallet.</li>
+      </ol>
+      <p class="sub-sm">Open localhost in Chrome with the extension. The built-in app browser cannot access Chrome extensions.</p>
+    </div>
+  </div>
+
+  <script src="/vendor/ethers.min.js"></script>
+  <script type="module" src="app.js?v=vote-rewards-11"></script>
+</body>
+</html>
