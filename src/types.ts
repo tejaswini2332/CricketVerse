@@ -45,6 +45,31 @@ export interface Player {
   calculatedPoints?: number;
   basePoints?: number;
   breakdown?: PointsBreakdown;
+  isLiveMatchPlayer?: boolean;
+  liveMatchId?: number;
+}
+
+export interface LiveCompetitor {
+  name: string;
+  shortName: string;
+  score: string;
+  logo?: string;
+  winner?: boolean;
+}
+
+export interface LiveMatch {
+  id: number;
+  leagueId: string;
+  leagueName: string;
+  teams: string;
+  shortName: string;
+  status: string;
+  state: "in" | "pre" | "post";
+  venue: string;
+  eventType: string;
+  summaryText: string;
+  competitors: LiveCompetitor[];
+  lastUpdated: string;
 }
 
 export interface AuctionItem {
@@ -142,4 +167,16 @@ export interface ToastMessage {
   id: string;
   text: string;
   isError?: boolean;
+}
+
+export interface PendingTx {
+  type: "MINT_CARD" | "BUY_AUCTION" | "BUY_TICKET" | "ENTER_TOURNAMENT" | "CLAIM_FAUCET" | "CLAIM_ETH";
+  title: string;
+  description: string;
+  amountCRIC: number;
+  recipientAddress: string;
+  itemImage?: string;
+  details?: Record<string, string | number>;
+  onConfirm: () => Promise<void>;
+  onCancel?: () => void;
 }

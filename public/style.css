@@ -1887,33 +1887,349 @@ body.cricket-day-theme {
 .badge-guide-item.indigo { background: #e0e7ff; color: #3730a3; }
 .badge-guide-item.green { background: #dcfce7; color: #166534; }
 
-/* Cleaner, calmer application shell */
+/* Cleaner, calmer application shell & comprehensive UI formatting fixes */
 .app-header {
-  padding: 12px clamp(16px, 3vw, 36px);
+  padding: 14px clamp(18px, 3vw, 36px);
   gap: 16px;
+  min-height: 74px;
 }
 
-.header-left, .header-right { gap: 12px; }
-.logo-badge { letter-spacing: 0.08em; }
-.network-badge { font-size: 0.76rem; padding: 6px 11px; }
-.main-layout { padding-top: 20px; }
+.header-left {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  flex-wrap: wrap;
+}
+
+.header-right {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.header-right .btn {
+  min-height: 38px;
+  padding: 8px 14px;
+  font-size: 0.84rem;
+  white-space: nowrap;
+}
+
+.logo-badge {
+  letter-spacing: 0.08em;
+}
+
+.network-badge {
+  font-size: 0.76rem;
+  padding: 6px 12px;
+  white-space: nowrap;
+}
+
+.token-currency-label {
+  font-size: 0.75rem;
+  font-weight: 800;
+  color: var(--turf-green-dark);
+  letter-spacing: 0.04em;
+}
+
+.main-layout {
+  padding: 24px clamp(16px, 3vw, 36px) 64px;
+  max-width: 1380px;
+  margin: 0 auto;
+}
+
 .sub-nav {
   position: sticky;
-  top: 76px;
+  top: 78px;
   z-index: 20;
-  justify-content: flex-start;
-  gap: 4px;
-  padding: 6px;
-  margin-bottom: 28px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+  padding: 6px 8px;
+  margin: 0 auto 32px auto;
+  max-width: 1120px;
   overflow-x: auto;
   scrollbar-width: thin;
+  background: rgba(255, 255, 255, 0.96);
+  backdrop-filter: blur(10px);
 }
-.nav-tab { flex: 0 0 auto; padding: 10px 16px; font-size: 0.88rem; }
-.section-hero { margin-bottom: 28px; gap: 12px; }
-.hero-title { font-size: clamp(1.7rem, 3vw, 2.2rem); letter-spacing: -0.04em; }
-.hero-sub { font-size: 0.94rem; }
-.cards-grid { gap: 18px; }
-.player-card { border-radius: 18px; }
+
+.nav-tab {
+  flex: 1 1 auto;
+  padding: 10px 16px;
+  font-size: 0.88rem;
+  border-radius: 10px;
+}
+
+/* Section Heroes */
+.section-hero {
+  margin-bottom: 28px;
+  gap: 14px;
+}
+
+.section-hero-split {
+  max-width: 100%;
+  width: 100%;
+  text-align: left;
+  align-items: stretch;
+  background: #ffffff;
+  border: 1px solid var(--card-border);
+  border-radius: var(--radius-lg);
+  padding: 22px 26px;
+  box-shadow: var(--shadow-card);
+}
+
+.section-hero-split .hero-sub {
+  margin: 0;
+  max-width: 720px;
+}
+
+.hero-title {
+  font-size: clamp(1.65rem, 2.6vw, 2.1rem);
+  letter-spacing: -0.03em;
+  line-height: 1.15;
+}
+
+.hero-sub {
+  font-size: 0.94rem;
+  line-height: 1.55;
+}
+
+/* Unified Form Controls across Marketplace, Tickets, Fantasy, Polls, Tournaments */
+.form-group {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.form-label {
+  display: block;
+  font-size: 0.78rem;
+  font-weight: 700;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.form-control {
+  width: 100%;
+  min-height: 42px;
+  padding: 9px 14px;
+  background: #ffffff;
+  border: 1px solid var(--card-border);
+  border-radius: var(--radius-sm);
+  color: var(--text-main);
+  font-family: var(--font-sans);
+  font-size: 0.9rem;
+  font-weight: 500;
+  line-height: 1.4;
+  transition: border-color 0.2s ease, box-shadow 0.2s ease;
+  box-sizing: border-box;
+}
+
+.form-control:hover {
+  border-color: #94a3b8;
+}
+
+.form-control:focus {
+  outline: none;
+  border-color: var(--turf-green);
+  box-shadow: 0 0 0 3px rgba(22, 163, 74, 0.14);
+}
+
+.form-control:disabled {
+  background: #f1f5f9;
+  color: var(--text-dim);
+  cursor: not-allowed;
+}
+
+.panel-heading {
+  font-size: 1.2rem;
+  font-weight: 800;
+  color: var(--cricket-navy-dark);
+  letter-spacing: -0.02em;
+  margin-bottom: 4px;
+}
+
+.panel-sub {
+  font-size: 0.88rem;
+  color: var(--text-muted);
+}
+
+.subheading {
+  font-size: 1.25rem;
+  font-weight: 800;
+  color: var(--cricket-navy-dark);
+  letter-spacing: -0.02em;
+}
+
+/* Player Cards & Auction Cards Alignment & Spacing */
+.cards-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(295px, 1fr));
+  gap: 22px;
+  align-items: stretch;
+}
+
+.marketplace-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(310px, 1fr));
+  gap: 22px;
+  align-items: stretch;
+}
+
+.player-card,
+.auction-item-card {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  border-radius: 18px;
+}
+
+.player-card .card-body,
+.auction-item-card .card-body {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  padding: 18px 20px 20px;
+}
+
+.card-title-group {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 10px;
+  margin-bottom: 14px;
+  min-height: 46px;
+}
+
+.card-player-name {
+  font-size: 1.12rem;
+  font-weight: 800;
+  color: var(--cricket-navy-dark);
+  line-height: 1.25;
+  margin-bottom: 3px;
+}
+
+.card-role-chip {
+  flex-shrink: 0;
+  white-space: nowrap;
+}
+
+/* Fix stat-label and stat-val stacking in 4-column card stats grid */
+.card-stats-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 6px;
+  background: #f8fafc;
+  padding: 10px 8px;
+  border-radius: 10px;
+  margin-bottom: 16px;
+  text-align: center;
+  border: 1px solid var(--card-border);
+}
+
+.card-stats-grid > div {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  min-width: 0;
+}
+
+.stat-label,
+.cstat-label {
+  display: block;
+  font-size: 0.64rem;
+  color: var(--text-dim);
+  text-transform: uppercase;
+  font-weight: 700;
+  letter-spacing: 0.03em;
+  margin-bottom: 3px;
+  white-space: nowrap;
+}
+
+.stat-val,
+.cstat-val {
+  display: block;
+  font-family: var(--font-mono);
+  font-size: 0.88rem;
+  font-weight: 800;
+  color: var(--cricket-navy-dark);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.card-actions {
+  margin-top: auto !important;
+  padding-top: 4px;
+}
+
+/* Rarity Tags & Micro Tags */
+.rarity-common {
+  background: #f1f5f9;
+  border: 1px solid #cbd5e1;
+  color: #334155;
+}
+
+.rarity-tag-micro {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 6px;
+  border-radius: 4px;
+  font-size: 0.65rem;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  line-height: 1.2;
+}
+
+/* Fantasy Tab Polish */
+.role-req.fulfilled,
+.role-req.met {
+  border-color: var(--turf-green);
+  color: var(--turf-green-dark);
+  background: var(--turf-green-light);
+}
+
+.live-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.7rem;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  padding: 3px 9px;
+  border-radius: 6px;
+  background: #fee2e2;
+  color: #b91c1c;
+  border: 1px solid #fecaca;
+  margin-bottom: 6px;
+}
+
+.fixture-selector-box {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin: 14px 0 16px;
+  padding: 12px 14px;
+  background: #f8fafc;
+  border: 1px solid var(--card-border);
+  border-radius: var(--radius-sm);
+}
+
+/* Tickets & Gatekeeper Polish */
+.gate-header {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 4px;
+  margin-bottom: 14px;
+}
+
 button, a, input, select { -webkit-tap-highlight-color: transparent; }
 button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible {
   outline: 3px solid rgba(37, 99, 235, 0.32);
@@ -1925,7 +2241,7 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
   .header-left, .header-right { width: 100%; flex-wrap: wrap; }
   .header-right { justify-content: flex-start; }
   .wallet-badge { margin-left: auto; }
-  .sub-nav { top: 0; }
+  .sub-nav { top: 0; justify-content: flex-start; }
   .main-layout { padding: 16px 18px 40px; }
 }
 
@@ -1958,8 +2274,8 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
 .owner-action-buttons { display: flex; flex-wrap: wrap; gap: 8px; }
 .tournament-owner-actions textarea { resize: vertical; }
 
-.wallet-help-btn { border: 0; background: transparent; color: var(--text-dim); font: inherit; font-size: .82rem; cursor: pointer; padding: 8px 2px; }
-.wallet-help-btn:hover { color: var(--turf-green-dark); }
+.wallet-help-btn { border: 1px solid var(--card-border); border-radius: 8px; background: #f8fafc; color: var(--text-muted); font: inherit; font-size: .82rem; font-weight: 600; cursor: pointer; padding: 8px 12px; min-height: 38px; transition: all 0.2s ease; }
+.wallet-help-btn:hover { color: var(--turf-green-dark); border-color: var(--turf-green); background: var(--turf-green-light); }
 .wallet-help-modal[hidden] { display: none; }
 .wallet-help-modal { position: fixed; inset: 0; z-index: 1000; display: grid; place-items: center; padding: 20px; background: rgba(8, 20, 16, .62); backdrop-filter: blur(8px); }
 .wallet-help-content { position: relative; width: min(100%, 480px); padding: 30px; border: 1px solid var(--card-border); border-radius: 22px; background: var(--card-white); box-shadow: 0 28px 80px rgba(0,0,0,.25); }
@@ -1968,12 +2284,13 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
 .wallet-help-content ol { padding-left: 22px; display: grid; gap: 10px; line-height: 1.45; }
 .wallet-help-close { position: absolute; right: 14px; top: 10px; border: 0; background: transparent; font-size: 28px; cursor: pointer; color: var(--text-dim); }
 .wallet-install-link { display: inline-flex; margin-top: 6px; text-decoration: none; }
-.ticket-filters { margin: 0 0 14px; }
-.organizer-panel { margin: 0 0 20px; padding: 18px; border: 1px solid var(--card-border); border-radius: 16px; background: var(--card-white); }
+.ticket-filters { margin: 0 0 18px; justify-content: flex-start; width: fit-content; }
+.organizer-panel { margin: 0 0 20px; padding: 22px; border: 1px solid var(--card-border); border-radius: 16px; background: var(--card-white); box-shadow: var(--shadow-card); }
 .organizer-panel[hidden] { display: none; }
-.organizer-panel h3 { margin: 0 0 12px; }
-.organizer-form-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; align-items: end; }
+.organizer-panel h3 { margin: 0 0 14px; }
+.organizer-form-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; align-items: end; }
 .organizer-form-grid label { display: grid; gap: 5px; }
 .organizer-form-grid button { min-height: 42px; }
 @media (max-width: 640px) { .organizer-form-grid { grid-template-columns: 1fr; } }
+
 

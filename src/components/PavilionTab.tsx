@@ -130,7 +130,7 @@ export const PavilionTab: React.FC = () => {
                       <span className="stat-val">{p.strikeRate}</span>
                     </div>
                     <div>
-                      <span className="stat-label">Dynamic CRIC</span>
+                      <span className="stat-label">CRIC Value</span>
                       <span className="stat-val text-green" style={{ fontWeight: 800 }}>
                         {(p.priceCRIC || Math.max(150, Math.round((p.creditCost || 8.5) * 80 + (p.calculatedPoints || 0) * 5))).toLocaleString()}
                       </span>
@@ -152,7 +152,7 @@ export const PavilionTab: React.FC = () => {
                       return (
                         <button
                           className="btn btn-primary btn-sm"
-                          style={{ flex: 1.3 }}
+                          style={{ flex: 1.35 }}
                           type="button"
                           onClick={() => mintCard(p)}
                           title={!isConnected ? "Connect wallet to collect" : `Mint / Collect card for ${dynamicCost.toLocaleString()} CRIC`}

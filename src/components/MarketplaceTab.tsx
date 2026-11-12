@@ -158,37 +158,37 @@ export const MarketplaceTab: React.FC = () => {
                   </span>
                 </div>
 
-                <div style={{ padding: "18px" }}>
-                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: "8px" }}>
+                <div className="card-body">
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: "10px", marginBottom: "10px" }}>
                     <div>
-                      <h4 style={{ fontSize: "1.15rem", fontWeight: 800, color: "var(--cricket-navy-dark)" }}>
+                      <h4 style={{ fontSize: "1.12rem", fontWeight: 800, color: "var(--cricket-navy-dark)", lineHeight: 1.25, marginBottom: "3px" }}>
                         {item.player.name}
                       </h4>
                       <p style={{ fontSize: "0.82rem", color: "var(--text-dim)" }}>
                         {item.player.role} · {item.player.team}
                       </p>
                     </div>
-                    <span style={{ fontSize: "0.75rem", background: "var(--stadium-grass-bg)", padding: "4px 8px", borderRadius: "6px", color: "var(--text-muted)" }}>
+                    <span style={{ fontSize: "0.72rem", fontWeight: 600, background: "var(--stadium-grass-bg)", padding: "4px 8px", borderRadius: "6px", color: "var(--text-muted)", whiteSpace: "nowrap", flexShrink: 0 }}>
                       {item.createdAt}
                     </span>
                   </div>
 
-                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "10px 14px", background: "#f8fafc", borderRadius: "10px", margin: "14px 0", border: "1px solid #e2e8f0" }}>
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "12px 14px", background: "#f8fafc", borderRadius: "10px", margin: "12px 0 16px", border: "1px solid #e2e8f0" }}>
                     <div>
-                      <span style={{ fontSize: "0.75rem", color: "var(--text-dim)", textTransform: "uppercase", display: "block" }}>Asking Price</span>
-                      <strong style={{ fontSize: "1.25rem", color: "var(--cricket-navy-mid)" }}>
-                        {item.priceCRIC} CRIC
+                      <span style={{ fontSize: "0.68rem", fontWeight: 700, color: "var(--text-dim)", textTransform: "uppercase", letterSpacing: "0.04em", display: "block", marginBottom: "2px" }}>Asking Price</span>
+                      <strong style={{ fontSize: "1.2rem", fontFamily: "var(--font-mono)", fontWeight: 800, color: "var(--cricket-navy-mid)" }}>
+                        {item.priceCRIC.toLocaleString()} CRIC
                       </strong>
                     </div>
                     <div style={{ textAlign: "right" }}>
-                      <span style={{ fontSize: "0.75rem", color: "var(--text-dim)", display: "block" }}>Seller</span>
-                      <span style={{ fontFamily: "var(--font-mono)", fontSize: "0.8rem", color: "var(--text-muted)" }}>
+                      <span style={{ fontSize: "0.68rem", fontWeight: 700, color: "var(--text-dim)", textTransform: "uppercase", letterSpacing: "0.04em", display: "block", marginBottom: "2px" }}>Seller</span>
+                      <span style={{ fontFamily: "var(--font-mono)", fontSize: "0.8rem", fontWeight: 600, color: "var(--text-muted)" }}>
                         {item.seller.slice(0, 6)}…{item.seller.slice(-4)}
                       </span>
                     </div>
                   </div>
 
-                  <div style={{ display: "flex", gap: "8px" }}>
+                  <div className="card-actions" style={{ display: "flex", gap: "10px" }}>
                     <button
                       className="btn btn-outline btn-sm"
                       style={{ flex: 1 }}
@@ -210,7 +210,7 @@ export const MarketplaceTab: React.FC = () => {
                     ) : (
                       <button
                         className="btn btn-primary btn-sm"
-                        style={{ flex: 1.2 }}
+                        style={{ flex: 1.25 }}
                         type="button"
                         onClick={() => buyAuctionItem(item)}
                       >

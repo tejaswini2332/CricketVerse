@@ -12,6 +12,11 @@ export default defineConfig({
         changeOrigin: true,
         rewrite: (path) => path.replace(/^\/rpc/, ""),
       },
+      "/espn-api": {
+        target: "https://site.web.api.espn.com",
+        changeOrigin: true,
+        rewrite: (path) => path.replace(/^\/espn-api/, ""),
+      },
     },
   },
   preview: {
@@ -22,6 +27,11 @@ export default defineConfig({
         target: "http://127.0.0.1:8545",
         changeOrigin: true,
         rewrite: (path) => path.replace(/^\/rpc/, ""),
+      },
+      "/espn-api": {
+        target: "https://site.web.api.espn.com",
+        changeOrigin: true,
+        rewrite: (path) => path.replace(/^\/espn-api/, ""),
       },
     },
   },

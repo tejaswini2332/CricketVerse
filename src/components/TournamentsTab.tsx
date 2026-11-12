@@ -28,11 +28,11 @@ export const TournamentsTab: React.FC = () => {
 
   return (
     <section id="section-tournaments" className="view-panel active">
-      <div className="section-hero">
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", flexWrap: "wrap", gap: "12px" }}>
+      <div className="section-hero section-hero-split">
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: "16px", width: "100%" }}>
           <div>
             <span className="hero-kicker">FANTASY LEAGUES</span>
-            <h2 className="hero-title">Tournaments</h2>
+            <h2 className="hero-title" style={{ marginBottom: "6px" }}>Tournaments</h2>
             <p className="hero-sub">
               Stake your Playing XI against global cricket managers in provably fair on-chain tournament prize pools.
             </p>
@@ -43,7 +43,7 @@ export const TournamentsTab: React.FC = () => {
             type="button"
             onClick={() => setShowCreate(!showCreate)}
           >
-            {showCreate ? "Cancel" : "Create League"}
+            {showCreate ? "Cancel" : "+ Create League"}
           </button>
         </div>
       </div>

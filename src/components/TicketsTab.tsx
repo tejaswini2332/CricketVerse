@@ -79,11 +79,11 @@ export const TicketsTab: React.FC = () => {
       <div className="tickets-layout">
         {/* Left: Ticket Catalog & Price Checker */}
         <div className="ticket-manager-col">
-          <div className="section-hero">
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", flexWrap: "wrap", gap: "12px" }}>
+          <div className="section-hero section-hero-split">
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: "16px", width: "100%" }}>
               <div>
                 <span className="hero-kicker">TICKETING</span>
-                <h2 className="hero-title">Stadium Gate Passes</h2>
+                <h2 className="hero-title" style={{ marginBottom: "6px" }}>Stadium Gate Passes</h2>
                 <p className="hero-sub">
                   ERC-1155 smart contract passes with cryptographic anti-scalping 15% fair resale ceiling.
                 </p>
@@ -94,7 +94,7 @@ export const TicketsTab: React.FC = () => {
                 type="button"
                 onClick={() => setShowIssuePanel(!showIssuePanel)}
               >
-                {showIssuePanel ? "Hide Issuer" : "Organizer: Issue Pass"}
+                {showIssuePanel ? "Hide Issuer" : "+ Organizer: Issue Pass"}
               </button>
             </div>
           </div>

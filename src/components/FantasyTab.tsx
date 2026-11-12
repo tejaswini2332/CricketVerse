@@ -8,6 +8,7 @@ export const FantasyTab: React.FC = () => {
     selectedPlayerIds,
     toggleSelectPlayer,
     autoPickBalancedSquad,
+    loadLiveMatchXI,
     clearSquad,
     todayMatches,
     selectedMatchId,
@@ -15,10 +16,14 @@ export const FantasyTab: React.FC = () => {
     matchCommentary,
     deliveriesLog,
     simulateOver,
+    isLoadingLiveMatches,
+    lastFeedSync,
+    refreshLiveMatches,
     squadValidation,
   } = useCricket();
 
   const [searchFilter, setSearchFilter] = useState<string>("");
+  const [onlyLiveMatchPlayers, setOnlyLiveMatchPlayers] = useState<boolean>(false);
 
   const selectedSquad = selectedPlayerIds
     .map((id) => allLoadedPlayers.find((p) => p.id === id))
@@ -28,15 +33,29 @@ export const FantasyTab: React.FC = () => {
     selectedSquad.reduce((sum, p) => sum + (p.calculatedPoints || 0), 0).toFixed(1)
   );
 
-  const availableRoster = allLoadedPlayers.filter((p) => {
-    if (!searchFilter) return true;
-    const q = searchFilter.toLowerCase();
-    return (
-      p.name.toLowerCase().includes(q) ||
-      (p.team && p.team.toLowerCase().includes(q)) ||
-      p.role.toLowerCase().includes(q)
-    );
-  });
+  const selectedMatch = todayMatches.find((m) => m.id === selectedMatchId) || todayMatches[0];
+  const liveMatchPlayersCount = allLoadedPlayers.filter((p) => p.liveMatchId === selectedMatch?.id).length;
+
+  const availableRoster = allLoadedPlayers
+    .filter((p) => {
+      if (onlyLiveMatchPlayers && selectedMatch && p.liveMatchId !== selectedMatch.id) {
+        return false;
+      }
+      if (!searchFilter) return true;
+      const q = searchFilter.toLowerCase();
+      return (
+        p.name.toLowerCase().includes(q) ||
+        (p.team && p.team.toLowerCase().includes(q)) ||
+        p.role.toLowerCase().includes(q)
+      );
+    })
+    .sort((a, b) => {
+      // Prioritize players from the currently selected live match at the top of the list
+      const aInMatch = a.liveMatchId === selectedMatch?.id ? 1 : 0;
+      const bInMatch = b.liveMatchId === selectedMatch?.id ? 1 : 0;
+      if (aInMatch !== bInMatch) return bInMatch - aInMatch;
+      return (b.calculatedPoints || 0) - (a.calculatedPoints || 0);
+    });
 
   const salaryPercentage = Math.min(100, Math.round((squadValidation.totalCredits / 120) * 100));
 
@@ -46,8 +65,6 @@ export const FantasyTab: React.FC = () => {
     Bowler: 0,
     "All-Rounder": 0,
   };
-
-  const selectedMatch = todayMatches.find((m) => m.id === selectedMatchId) || todayMatches[0];
 
   return (
     <section id="section-fantasy" className="view-panel active">
@@ -120,22 +137,32 @@ export const FantasyTab: React.FC = () => {
             </div>
           )}
 
-          <div className="roster-pool-controls">
+          <div className="roster-pool-controls" style={{ flexWrap: "wrap" }}>
             <input
               type="text"
               id="player-search"
               className="input-search"
+              style={{ minWidth: "200px", textAlign: "left" }}
               placeholder="Search players by name, role, team…"
               value={searchFilter}
               onChange={(e) => setSearchFilter(e.target.value)}
             />
+            <button
+              id="load-live-xi-btn"
+              className="btn btn-sm btn-primary"
+              type="button"
+              onClick={loadLiveMatchXI}
+              title="Populate Playing XI from the selected live fixture's active scorecard"
+            >
+              ⚡ Load Live Match XI
+            </button>
             <button
               id="auto-squad-btn"
               className="btn btn-sm btn-ghost"
               type="button"
               onClick={autoPickBalancedSquad}
             >
-              Auto-Pick Balanced XI
+              Auto-Pick XI
             </button>
             <button
               id="clear-squad-btn"
@@ -147,9 +174,26 @@ export const FantasyTab: React.FC = () => {
             </button>
           </div>
 
+          {liveMatchPlayersCount > 0 && (
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "12px", padding: "8px 12px", background: "#f0fdf4", border: "1px solid var(--turf-green-border)", borderRadius: "8px", fontSize: "0.8rem" }}>
+              <span style={{ color: "var(--turf-green-dark)", fontWeight: 700 }}>
+                🟢 {liveMatchPlayersCount} active players synced from {selectedMatch?.shortName} live scorecard
+              </span>
+              <button
+                type="button"
+                className="btn btn-sm btn-outline"
+                style={{ padding: "3px 10px", fontSize: "0.75rem", minHeight: "28px" }}
+                onClick={() => setOnlyLiveMatchPlayers(!onlyLiveMatchPlayers)}
+              >
+                {onlyLiveMatchPlayers ? "Show All 4,800+ Players" : "Filter: This Match Only"}
+              </button>
+            </div>
+          )}
+
           <div id="player-picker-list" className="player-picker-list" style={{ maxHeight: "560px", overflowY: "auto" }}>
             {availableRoster.slice(0, 80).map((player) => {
               const isSelected = selectedPlayerIds.includes(player.id);
+              const isFromCurrentMatch = player.liveMatchId === selectedMatch?.id;
               return (
                 <div
                   key={player.id}
@@ -162,7 +206,7 @@ export const FantasyTab: React.FC = () => {
                     borderRadius: "10px",
                     marginBottom: "8px",
                     background: isSelected ? "var(--turf-green-light)" : "white",
-                    border: `1px solid ${isSelected ? "var(--turf-green-border)" : "var(--card-border)"}`,
+                    border: `1px solid ${isSelected ? "var(--turf-green-border)" : isFromCurrentMatch ? "#93c5fd" : "var(--card-border)"}`,
                     transition: "all 0.2s ease",
                   }}
                 >
@@ -176,14 +220,26 @@ export const FantasyTab: React.FC = () => {
                       }}
                     />
                     <div>
-                      <div style={{ fontWeight: 700, fontSize: "0.95rem", color: "var(--text-main)" }}>
-                        {player.name}
+                      <div style={{ display: "flex", alignItems: "center", gap: "6px", flexWrap: "wrap" }}>
+                        <span style={{ fontWeight: 700, fontSize: "0.95rem", color: "var(--text-main)" }}>
+                          {player.name}
+                        </span>
+                        {isFromCurrentMatch && (
+                          <span style={{ fontSize: "0.64rem", fontWeight: 800, padding: "2px 6px", borderRadius: "4px", background: "#dbeafe", color: "#1d4ed8", textTransform: "uppercase" }}>
+                            LIVE IN MATCH
+                          </span>
+                        )}
                       </div>
-                      <div style={{ fontSize: "0.78rem", color: "var(--text-dim)" }}>
+                      <div style={{ fontSize: "0.78rem", color: "var(--text-dim)", marginTop: "2px" }}>
                         <span className={`rarity-tag-micro rarity-${player.rarity.toLowerCase()}`} style={{ marginRight: "6px" }}>
                           {player.rarity}
                         </span>
                         {player.role} · {player.team}
+                        {player.stats && (player.stats.runs > 0 || player.stats.wickets > 0) && (
+                          <span style={{ marginLeft: "6px", color: "var(--turf-green-dark)", fontWeight: 700 }}>
+                            ({player.stats.runs}r, {player.stats.wickets}w · {player.calculatedPoints || 0} pts)
+                          </span>
+                        )}
                       </div>
                     </div>
                   </div>
@@ -213,30 +269,122 @@ export const FantasyTab: React.FC = () => {
           </div>
         </div>
 
-        {/* Right: Live Match Simulator */}
+        {/* Right: Live Match Simulator & Real-Time API Feed */}
         <div className="fantasy-simulation-card">
-          <div className="sim-header">
-            <div>
-              <span className="live-tag">LIVE MATCH</span>
-              <h3 id="fantasy-match-title" className="title-md">
-                {selectedMatch.teams}
+          <div className="sim-header" style={{ alignItems: "flex-start", gap: "12px", flexWrap: "wrap" }}>
+            <div style={{ flex: 1, minWidth: "220px" }}>
+              <div style={{ display: "flex", alignItems: "center", gap: "8px", flexWrap: "wrap", marginBottom: "6px" }}>
+                <span className="live-tag" style={{ marginBottom: 0 }}>
+                  <span className="pulse-dot-green" style={{ width: "7px", height: "7px", marginRight: "4px" }}></span>
+                  {selectedMatch?.state === "in" ? "LIVE API FEED" : selectedMatch?.state === "post" ? "OFFICIAL RESULT" : "UPCOMING FIXTURE"}
+                </span>
+                {selectedMatch?.leagueName && (
+                  <span style={{ fontSize: "0.72rem", fontWeight: 700, color: "var(--cricket-blue-accent)", background: "#eff6ff", padding: "3px 8px", borderRadius: "6px", border: "1px solid #bfdbfe" }}>
+                    {selectedMatch.leagueName} · {selectedMatch.eventType}
+                  </span>
+                )}
+              </div>
+              <h3 id="fantasy-match-title" className="title-md" style={{ lineHeight: 1.25 }}>
+                {selectedMatch?.teams || "Live Cricket Match"}
               </h3>
+              {selectedMatch?.venue && (
+                <div style={{ fontSize: "0.8rem", color: "var(--text-dim)", marginTop: "3px" }}>
+                  📍 {selectedMatch.venue}
+                </div>
+              )}
             </div>
-            <button
-              id="simulate-over-btn"
-              className="btn btn-primary pulse-btn"
-              type="button"
-              onClick={simulateOver}
-              disabled={selectedPlayerIds.length !== 11}
-              title={selectedPlayerIds.length !== 11 ? "Select 11 players first" : "Simulate an over"}
-            >
-              Simulate 6-Ball Over
-            </button>
+
+            <div style={{ display: "flex", gap: "8px", flexWrap: "wrap" }}>
+              <button
+                type="button"
+                className="btn btn-outline btn-sm"
+                onClick={() => refreshLiveMatches(true)}
+                disabled={isLoadingLiveMatches}
+                title="Fetch latest live scores and player scorecards from ESPN Cricket API"
+              >
+                {isLoadingLiveMatches ? "Syncing…" : "↻ Sync Live API"}
+              </button>
+              <button
+                id="simulate-over-btn"
+                className="btn btn-primary btn-sm pulse-btn"
+                type="button"
+                onClick={simulateOver}
+                disabled={selectedPlayerIds.length !== 11}
+                title={selectedPlayerIds.length !== 11 ? "Select 11 players first" : "Simulate an over"}
+              >
+                Simulate 6-Ball Over
+              </button>
+            </div>
           </div>
 
-          <div className="roster-pool-controls" style={{ marginTop: "12px" }}>
-            <label htmlFor="matchday-match-select" className="sub-sm" style={{ fontWeight: 700 }}>
-              Select Fixture:
+          {/* Live Team Scoreboard Banner */}
+          {selectedMatch?.competitors && selectedMatch.competitors.length > 0 && (
+            <div
+              style={{
+                background: "linear-gradient(135deg, #0f172a 0%, #1e293b 100%)",
+                color: "#f8fafc",
+                borderRadius: "12px",
+                padding: "14px 16px",
+                marginBottom: "14px",
+                border: "1px solid #334155",
+                boxShadow: "0 4px 14px rgba(15, 23, 42, 0.12)",
+              }}
+            >
+              <div style={{ display: "grid", gap: "10px" }}>
+                {selectedMatch.competitors.map((comp, idx) => (
+                  <div
+                    key={idx}
+                    style={{
+                      display: "flex",
+                      justifyContent: "space-between",
+                      alignItems: "center",
+                      paddingBottom: idx === 0 && selectedMatch.competitors.length > 1 ? "8px" : "0",
+                      borderBottom: idx === 0 && selectedMatch.competitors.length > 1 ? "1px solid rgba(255,255,255,0.1)" : "none",
+                    }}
+                  >
+                    <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+                      {comp.logo ? (
+                        <img
+                          src={comp.logo}
+                          alt={comp.shortName}
+                          style={{ width: "26px", height: "26px", borderRadius: "50%", background: "#fff", padding: "2px", objectFit: "contain" }}
+                        />
+                      ) : (
+                        <span style={{ width: "26px", height: "26px", borderRadius: "50%", background: "#334155", display: "inline-flex", alignItems: "center", justifyContent: "center", fontSize: "0.7rem", fontWeight: 800 }}>
+                          {comp.shortName.slice(0, 3)}
+                        </span>
+                      )}
+                      <div>
+                        <span style={{ fontWeight: 700, fontSize: "0.92rem", color: "#ffffff" }}>
+                          {comp.name}
+                        </span>
+                        {comp.winner && (
+                          <span style={{ marginLeft: "6px", fontSize: "0.7rem", color: "#4ade80", fontWeight: 800 }}>
+                            ★ WON
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                    <div style={{ fontFamily: "var(--font-mono)", fontWeight: 800, fontSize: "0.96rem", color: "#38bdf8" }}>
+                      {comp.score || "Yet to bat"}
+                    </div>
+                  </div>
+                ))}
+              </div>
+              {selectedMatch.summaryText && (
+                <div style={{ marginTop: "10px", paddingTop: "8px", borderTop: "1px dashed rgba(255,255,255,0.15)", fontSize: "0.78rem", color: "#cbd5e1", display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: "8px" }}>
+                  <span>📢 {selectedMatch.summaryText}</span>
+                  <span style={{ fontFamily: "var(--font-mono)", fontSize: "0.72rem", color: "#94a3b8" }}>
+                    Updated {lastFeedSync}
+                  </span>
+                </div>
+              )}
+            </div>
+          )}
+
+          <div className="fixture-selector-box">
+            <label htmlFor="matchday-match-select" className="form-label">
+              Select Live Global Fixture ({todayMatches.length} Active Matches)
             </label>
             <select
               id="matchday-match-select"
@@ -246,12 +394,12 @@ export const FantasyTab: React.FC = () => {
             >
               {todayMatches.map((m) => (
                 <option key={m.id} value={m.id}>
-                  {m.teams} · {m.status} ({m.venue})
+                  [{m.leagueName}] {m.teams} — {m.status}
                 </option>
               ))}
             </select>
-            <span id="matchday-api-status" className="sub-sm text-dim" role="status" style={{ display: "block", marginTop: "4px" }}>
-              Live Score Feed Connected · Deterministic Point Engine Ready
+            <span id="matchday-api-status" className="sub-sm text-dim" role="status" style={{ display: "block", marginTop: "2px", fontSize: "0.78rem" }}>
+              🟢 ESPN Cricket Live API Connected ({todayMatches.length} fixtures) · Auto-syncing every 25s
             </span>
           </div>
 
@@ -268,13 +416,13 @@ export const FantasyTab: React.FC = () => {
 
           {/* Commentary Feed */}
           <div className="telemetry-feed-box" style={{ marginBottom: "16px" }}>
-            <div className="feed-header">MATCH TELEMETRY & COMMENTARY</div>
+            <div className="feed-header">LIVE MATCH TELEMETRY & COMMENTARY</div>
             <div id="latest-commentary" className="commentary-content" style={{ fontWeight: 600, color: "var(--cricket-navy-dark)", marginBottom: "8px" }}>
               {matchCommentary}
             </div>
-            <div style={{ maxHeight: "120px", overflowY: "auto", fontSize: "0.82rem", color: "var(--text-muted)" }}>
+            <div style={{ maxHeight: "130px", overflowY: "auto", fontSize: "0.82rem", color: "var(--text-muted)" }}>
               {deliveriesLog.map((del, i) => (
-                <div key={i} style={{ padding: "3px 0", borderBottom: "1px dashed #e2e8f0" }}>
+                <div key={i} style={{ padding: "4px 0", borderBottom: "1px dashed #e2e8f0" }}>
                   🏏 {del}
                 </div>
               ))}
@@ -292,7 +440,7 @@ export const FantasyTab: React.FC = () => {
 
             {selectedSquad.length === 0 ? (
               <div className="empty-state" style={{ padding: "24px" }}>
-                Pick players on the left to inspect real-time fantasy score breakdown.
+                Pick players on the left or click "Load Live Match XI" to inspect real-time fantasy score breakdown.
               </div>
             ) : (
               <div id="selected-squad-breakdown" className="squad-pts-list" style={{ maxHeight: "300px", overflowY: "auto" }}>
@@ -314,7 +462,14 @@ export const FantasyTab: React.FC = () => {
                       }}
                     >
                       <div>
-                        <div style={{ fontWeight: 700, fontSize: "0.9rem" }}>{player.name}</div>
+                        <div style={{ fontWeight: 700, fontSize: "0.9rem" }}>
+                          {player.name}
+                          {player.liveMatchId === selectedMatch?.id && (
+                            <span style={{ marginLeft: "6px", fontSize: "0.65rem", color: "#1d4ed8", background: "#dbeafe", padding: "1px 5px", borderRadius: "4px", fontWeight: 800 }}>
+                              LIVE
+                            </span>
+                          )}
+                        </div>
                         <div style={{ fontSize: "0.75rem", color: "var(--text-dim)" }}>
                           {stats.runs} runs ({stats.fours}x4, {stats.sixes}x6) · {stats.wickets} wkt · {player.multiplier}x multi
                         </div>
@@ -333,3 +488,4 @@ export const FantasyTab: React.FC = () => {
     </section>
   );
 };
+

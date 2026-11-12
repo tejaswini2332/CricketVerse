@@ -11,6 +11,7 @@ import { PollsTab } from "./components/PollsTab";
 import { TournamentsTab } from "./components/TournamentsTab";
 import { CardSvgModal } from "./components/CardSvgModal";
 import { WalletHelpModal } from "./components/WalletHelpModal";
+import { TransactionConfirmationModal } from "./components/TransactionConfirmationModal";
 import { Toast } from "./components/Toast";
 
 const MainContent: React.FC = () => {
@@ -33,6 +34,7 @@ const MainContent: React.FC = () => {
 
       <CardSvgModal />
       <WalletHelpModal />
+      <TransactionConfirmationModal />
       <Toast />
     </div>
   );

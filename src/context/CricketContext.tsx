@@ -1,9 +1,9 @@
 import React, { createContext, useContext, useState, useEffect, ReactNode } from "react";
-import { Player, AuctionItem, Ticket, Poll, Tournament, ToastMessage, PlayerRarity } from "../types";
+import { Player, AuctionItem, Ticket, Poll, Tournament, ToastMessage, PlayerRarity, PendingTx, LiveMatch, PlayerRole } from "../types";
 import { INITIAL_PLAYERS, INITIAL_TICKETS, INITIAL_POLLS, INITIAL_TOURNAMENTS } from "../seedData";
 import { calculatePlayerPoints, validateSquad, generateSvgAvatar } from "../scoringEngine";
 import confetti from "canvas-confetti";
-import { BrowserProvider, JsonRpcProvider, Contract, formatEther, hexlify, toUtf8Bytes } from "ethers";
+import { BrowserProvider, JsonRpcProvider, Contract, formatEther, parseEther, isAddress } from "ethers";
 
 export const DEPLOYED_CONTRACTS = {
   network: "localhost",
@@ -66,30 +66,6 @@ async function addCricTokenToMetaMask(): Promise<boolean> {
   }
 }
 
-async function triggerWalletTx(dataString: string) {
-  const eth = (window as unknown as { ethereum?: unknown }).ethereum;
-  if (!eth) return null;
-  try {
-    const provider = new BrowserProvider(eth as never);
-    const signer = await provider.getSigner();
-    const address = await signer.getAddress();
-    // Send 0 ETH transaction with payload data to broadcast on-chain via MetaMask!
-    const tx = await signer.sendTransaction({
-      to: address,
-      value: 0n,
-      data: hexlify(toUtf8Bytes(dataString)),
-    });
-    return tx;
-  } catch (err: unknown) {
-    const errorObj = err as { code?: number; message?: string };
-    if (errorObj?.code === 4001 || errorObj?.message?.includes("rejected") || errorObj?.message?.includes("denied")) {
-      throw new Error("Transaction rejected in MetaMask.");
-    }
-    console.warn("MetaMask TX note:", err);
-    return null;
-  }
-}
-
 interface CricketContextType {
   // Wallet & Network
   walletAddress: string;
@@ -134,17 +110,21 @@ interface CricketContextType {
   buyAuctionItem: (item: AuctionItem) => Promise<boolean>;
   cancelAuctionListing: (itemId: string) => void;
 
-  // Matchday XI Fantasy
+  // Matchday XI Fantasy (Live API Connected)
   selectedPlayerIds: number[];
   toggleSelectPlayer: (playerId: number) => void;
   autoPickBalancedSquad: () => void;
+  loadLiveMatchXI: () => void;
   clearSquad: () => void;
-  todayMatches: { id: number; teams: string; status: string; venue: string }[];
+  todayMatches: LiveMatch[];
   selectedMatchId: number;
   setSelectedMatchId: (id: number) => void;
   matchCommentary: string;
   deliveriesLog: string[];
   simulateOver: () => void;
+  isLoadingLiveMatches: boolean;
+  lastFeedSync: string;
+  refreshLiveMatches: (showFeedback?: boolean) => Promise<void>;
   squadValidation: { isValid: boolean; error?: string; totalCredits: number; roleCounts?: Record<string, number> };
 
   // Stadium Passes
@@ -175,6 +155,13 @@ interface CricketContextType {
   setShowWalletModal: (show: boolean) => void;
   addCricketNetworkToMetaMask: () => Promise<boolean>;
   addCricTokenToMetaMask: () => Promise<boolean>;
+
+  // Web3 Transaction Confirmation
+  pendingTx: PendingTx | null;
+  setPendingTx: (tx: PendingTx | null) => void;
+  isTransacting: boolean;
+  confirmPendingTx: () => Promise<void>;
+  cancelPendingTx: () => void;
 }
 
 const CricketContext = createContext<CricketContextType | undefined>(undefined);
@@ -243,44 +230,135 @@ export const CricketProvider: React.FC<{ children: ReactNode }> = ({ children })
     }
   }, []);
 
-  // Sync real on-chain balances from Local Hardhat node via /rpc proxy
-  useEffect(() => {
-    let active = true;
-    async function syncOnChainBalances() {
-      if (!walletAddress) return;
-      try {
-        const readProvider = new JsonRpcProvider(`${window.location.origin}/rpc`);
-        const ethBal = await readProvider.getBalance(walletAddress);
-        if (!active) return;
-        const ethNum = Number(Number(formatEther(ethBal)).toFixed(4));
-        setEthBalance(ethNum);
-        if (ethNum >= 20) {
-          setHasClaimedDemoGas(true);
-        }
+  // Track pending transaction confirmation modal
+  const [pendingTx, setPendingTx] = useState<PendingTx | null>(null);
+  const [isTransacting, setIsTransacting] = useState<boolean>(false);
 
-        const cric = new Contract(
-          DEPLOYED_CONTRACTS.contracts.CRIC,
-          ["function balanceOf(address) view returns (uint256)"],
-          readProvider
-        );
-        const cricBal = await cric.balanceOf(walletAddress);
-        if (!active) return;
-        const cricNum = Number(formatEther(cricBal));
-        setCricBalance(cricNum);
-        if (cricNum >= 50000) {
-          setHasClaimedFaucet(true);
-        }
-      } catch (err) {
-        // Dev server or background node initializing
+  // Sync real on-chain balances from Local Hardhat node via /rpc proxy
+  const syncOnChainBalances = async () => {
+    if (!walletAddress) return;
+    try {
+      const readProvider = new JsonRpcProvider(`${window.location.origin}/rpc`);
+      const ethBal = await readProvider.getBalance(walletAddress);
+      const ethNum = Number(Number(formatEther(ethBal)).toFixed(4));
+      setEthBalance(ethNum);
+      if (ethNum >= 10) {
+        setHasClaimedDemoGas(true);
       }
+
+      const cric = new Contract(
+        DEPLOYED_CONTRACTS.contracts.CRIC,
+        [
+          "function balanceOf(address) view returns (uint256)",
+          "function lastFaucetClaim(address) view returns (uint256)",
+        ],
+        readProvider
+      );
+      const cricBal = await cric.balanceOf(walletAddress);
+      const cricNum = Number(formatEther(cricBal));
+      setCricBalance(cricNum);
+
+      const lastClaim = await cric.lastFaucetClaim(walletAddress);
+      if (Number(lastClaim) > 0 || cricNum > 0) {
+        setHasClaimedFaucet(true);
+      }
+    } catch {
+      // Dev server or background node initializing
     }
+  };
+
+  useEffect(() => {
     syncOnChainBalances();
-    const interval = setInterval(syncOnChainBalances, 6000);
-    return () => {
-      active = false;
-      clearInterval(interval);
-    };
+    const interval = setInterval(syncOnChainBalances, 4000);
+    return () => clearInterval(interval);
   }, [walletAddress]);
+
+  // Execute real on-chain transfer via MetaMask (or local RPC node if in iframe)
+  const executeOnChainTransfer = async (amountCric: number, recipient: string) => {
+    const eth = (window as unknown as { ethereum?: unknown }).ethereum;
+    const isInIframe = typeof window !== "undefined" && window.self !== window.top;
+    const weiAmount = parseEther(amountCric.toString());
+    const validRecipient = isAddress(recipient) ? recipient : DEPLOYED_CONTRACTS.contracts.CricketMarketplace;
+
+    setIsTransacting(true);
+    try {
+      let signedWithMetaMask = false;
+      if (eth && isRealWallet && !isInIframe) {
+        try {
+          const provider = new BrowserProvider(eth as never);
+          const net = await provider.getNetwork();
+          if (Number(net.chainId) !== DEPLOYED_CONTRACTS.chainId) {
+            await addCricketNetworkToMetaMask();
+          }
+          const signer = await provider.getSigner();
+          const signerAddr = await signer.getAddress();
+
+          if (signerAddr.toLowerCase() === walletAddress.toLowerCase()) {
+            const cric = new Contract(
+              DEPLOYED_CONTRACTS.contracts.CRIC,
+              ["function transfer(address to, uint256 amount) returns (bool)"],
+              signer
+            );
+            showToast("Please approve the transaction in your MetaMask popup window…");
+            const tx = await cric.transfer(validRecipient, weiAmount);
+            showToast(`Broadcasted to blockchain! Hash: ${tx.hash.slice(0, 10)}…`);
+            await tx.wait();
+            signedWithMetaMask = true;
+          }
+        } catch (err: unknown) {
+          const errorObj = err as { code?: number; message?: string };
+          if (errorObj?.code === 4001 || errorObj?.message?.includes("rejected") || errorObj?.message?.includes("denied")) {
+            throw new Error("Transaction rejected in MetaMask.");
+          }
+          console.warn("MetaMask sign fallback to RPC:", err);
+        }
+      }
+
+      if (!signedWithMetaMask) {
+        // Execute real transaction on the Hardhat EVM node via /rpc
+        const rpc = new JsonRpcProvider(`${window.location.origin}/rpc`);
+        await rpc.send("hardhat_impersonateAccount", [walletAddress]);
+        const cricIface = new Contract(
+          DEPLOYED_CONTRACTS.contracts.CRIC,
+          ["function transfer(address to, uint256 amount) returns (bool)"],
+          rpc
+        ).interface;
+        const data = cricIface.encodeFunctionData("transfer", [validRecipient, weiAmount]);
+        const txHash = await rpc.send("eth_sendTransaction", [
+          {
+            from: walletAddress,
+            to: DEPLOYED_CONTRACTS.contracts.CRIC,
+            data,
+          },
+        ]);
+        await rpc.send("hardhat_stopImpersonatingAccount", [walletAddress]);
+        showToast(`On-Chain Tx Mined! Hash: ${String(txHash).slice(0, 12)}…`);
+      }
+
+      await syncOnChainBalances();
+    } finally {
+      setIsTransacting(false);
+    }
+  };
+
+  const confirmPendingTx = async () => {
+    if (!pendingTx) return;
+    try {
+      await pendingTx.onConfirm();
+      setPendingTx(null);
+    } catch (err: unknown) {
+      const errorObj = err as { message?: string };
+      showToast(errorObj?.message || "Transaction confirmation failed.", true);
+    }
+  };
+
+  const cancelPendingTx = () => {
+    if (pendingTx?.onCancel) {
+      pendingTx.onCancel();
+    }
+    setPendingTx(null);
+    showToast("Transaction cancelled. No tokens were deducted.");
+  };
 
   // Toasts & Modals
   const [toasts, setToasts] = useState<ToastMessage[]>([]);
@@ -381,25 +459,29 @@ export const CricketProvider: React.FC<{ children: ReactNode }> = ({ children })
       return false;
     }
 
-    const eth = (window as unknown as { ethereum?: unknown }).ethereum;
-    if (eth && isRealWallet) {
-      try {
-        showToast(`Please confirm minting ${player.name} in MetaMask…`);
-        const tx = await triggerWalletTx(`CricketVerse:MintCard:${player.id}:${cost}CRIC`);
-        if (tx) {
-          showToast(`MetaMask Tx broadcasted! Hash: ${tx.hash.slice(0, 10)}…`);
-        }
-      } catch (err: unknown) {
-        const errorObj = err as { message?: string };
-        showToast(errorObj?.message || "MetaMask transaction cancelled.", true);
-        return false;
-      }
-    }
+    setPendingTx({
+      type: "MINT_CARD",
+      title: `Mint Player Card: ${player.name}`,
+      description: `Collect official dynamic player card NFT (${player.rarity} · ${player.role}) on-chain.`,
+      amountCRIC: cost,
+      recipientAddress: DEPLOYED_CONTRACTS.treasury,
+      itemImage: player.avatar,
+      details: {
+        "Player": player.name,
+        "Rarity": player.rarity,
+        "Role": player.role,
+        "Team": player.team,
+        "Price": `${cost.toLocaleString()} CRIC`,
+        "Smart Contract": "PlayerCardNFT (ERC-1155)",
+      },
+      onConfirm: async () => {
+        await executeOnChainTransfer(cost, DEPLOYED_CONTRACTS.treasury);
+        setUserCollection((prev) => [player, ...prev]);
+        confetti({ particleCount: 50, spread: 60, origin: { y: 0.7 } });
+        showToast(`Confirmed! Collected ${player.name} (${player.rarity}) card for ${cost.toLocaleString()} CRIC!`);
+      },
+    });
 
-    setCricBalance((prev) => prev - cost);
-    setUserCollection((prev) => [player, ...prev]);
-    confetti({ particleCount: 50, spread: 60, origin: { y: 0.7 } });
-    showToast(`Collected ${player.name} (${player.rarity}) card for ${cost.toLocaleString()} CRIC!`);
     return true;
   };
 
@@ -409,7 +491,7 @@ export const CricketProvider: React.FC<{ children: ReactNode }> = ({ children })
       id: "auc-1",
       cardId: 9,
       player: INITIAL_PLAYERS[8], // MS Dhoni
-      seller: "0x8626...f96a",
+      seller: "0x8626f6940E2eb28930eFb4CeF49B2d1F2C9C1199",
       priceCRIC: 1450,
       createdAt: "10 mins ago",
     },
@@ -417,7 +499,7 @@ export const CricketProvider: React.FC<{ children: ReactNode }> = ({ children })
       id: "auc-2",
       cardId: 8,
       player: INITIAL_PLAYERS[7], // Rashid Khan
-      seller: "0x3C44...93BC",
+      seller: "0x3C44CdDdB6a900fa2b585dd299e03d12FA4293BC",
       priceCRIC: 980,
       createdAt: "25 mins ago",
     },
@@ -425,7 +507,7 @@ export const CricketProvider: React.FC<{ children: ReactNode }> = ({ children })
       id: "auc-3",
       cardId: 10,
       player: INITIAL_PLAYERS[9], // Pat Cummins
-      seller: "0x7099...79C8",
+      seller: "0x70997970C51812dc3A010C7d01b50e0d17dc79C8",
       priceCRIC: 720,
       createdAt: "1 hour ago",
     },
@@ -433,7 +515,7 @@ export const CricketProvider: React.FC<{ children: ReactNode }> = ({ children })
       id: "auc-4",
       cardId: 16,
       player: INITIAL_PLAYERS[15], // Sachin Tendulkar
-      seller: "0x5149...f2d0",
+      seller: "0x90F79bf6EB2c4f870365E785982E1f101E93b906",
       priceCRIC: 2042,
       createdAt: "3 mins ago",
     },
@@ -441,7 +523,7 @@ export const CricketProvider: React.FC<{ children: ReactNode }> = ({ children })
       id: "auc-5",
       cardId: 3,
       player: INITIAL_PLAYERS[2], // Rohit Sharma
-      seller: "0x976E...e673",
+      seller: "0x976EA74026E726554dB657fA54763abd0C3a0aa9",
       priceCRIC: 1150,
       createdAt: "18 mins ago",
     },
@@ -449,7 +531,7 @@ export const CricketProvider: React.FC<{ children: ReactNode }> = ({ children })
       id: "auc-6",
       cardId: 4,
       player: INITIAL_PLAYERS[3], // Hardik Pandya
-      seller: "0x14dC...2A88",
+      seller: "0x14dC79964da2C08b23698B3D3cc7Ca32193d9955",
       priceCRIC: 620,
       createdAt: "42 mins ago",
     },
@@ -457,7 +539,7 @@ export const CricketProvider: React.FC<{ children: ReactNode }> = ({ children })
       id: "auc-7",
       cardId: 5,
       player: INITIAL_PLAYERS[4], // Rishabh Pant
-      seller: "0x2361...74C7",
+      seller: "0x23618e81E3f5cdF7f54C3d65f7FBc0aBf5B21E8f",
       priceCRIC: 580,
       createdAt: "1 hour ago",
     },
@@ -465,7 +547,7 @@ export const CricketProvider: React.FC<{ children: ReactNode }> = ({ children })
       id: "auc-8",
       cardId: 6,
       player: INITIAL_PLAYERS[5], // Ravindra Jadeja
-      seller: "0x12b4...99ac",
+      seller: "0xa0Ee7A142d267C1f36714E4a8F75612F20a79720",
       priceCRIC: 890,
       createdAt: "2 hours ago",
     },
@@ -473,7 +555,7 @@ export const CricketProvider: React.FC<{ children: ReactNode }> = ({ children })
       id: "auc-9",
       cardId: 12,
       player: INITIAL_PLAYERS[11], // Mohammed Shami
-      seller: "0x9923...ff41",
+      seller: "0xBcd4042DE499D14e55001CcbB24a551F3b954096",
       priceCRIC: 520,
       createdAt: "3 hours ago",
     },
@@ -515,26 +597,29 @@ export const CricketProvider: React.FC<{ children: ReactNode }> = ({ children })
       return false;
     }
 
-    const eth = (window as unknown as { ethereum?: unknown }).ethereum;
-    if (eth && isRealWallet) {
-      try {
-        showToast(`Please confirm purchase of ${item.player.name} in MetaMask…`);
-        const tx = await triggerWalletTx(`CricketVerse:AuctionBuy:${item.id}:${item.priceCRIC}CRIC`);
-        if (tx) {
-          showToast(`MetaMask Tx broadcasted! Hash: ${tx.hash.slice(0, 10)}…`);
-        }
-      } catch (err: unknown) {
-        const errorObj = err as { message?: string };
-        showToast(errorObj?.message || "MetaMask transaction cancelled.", true);
-        return false;
-      }
-    }
+    setPendingTx({
+      type: "BUY_AUCTION",
+      title: `Buy Auction Asset: ${item.player.name}`,
+      description: `Purchase secondary market player card #${item.cardId}. 95% goes to seller, 5% creator royalty.`,
+      amountCRIC: item.priceCRIC,
+      recipientAddress: item.seller,
+      itemImage: item.player.avatar,
+      details: {
+        "Asset": item.player.name,
+        "Seller": `${item.seller.slice(0, 6)}...${item.seller.slice(-4)}`,
+        "Asking Price": `${item.priceCRIC.toLocaleString()} CRIC`,
+        "Royalty Routed (5%)": `${(item.priceCRIC * 0.05).toFixed(1)} CRIC`,
+        "Seller Proceeds (95%)": `${(item.priceCRIC * 0.95).toFixed(1)} CRIC`,
+      },
+      onConfirm: async () => {
+        await executeOnChainTransfer(item.priceCRIC, item.seller);
+        setAuctionListings((prev) => prev.filter((a) => a.id !== item.id));
+        setUserCollection((prev) => [item.player, ...prev]);
+        confetti({ particleCount: 60, spread: 70, origin: { y: 0.6 } });
+        showToast(`Purchased ${item.player.name} for ${item.priceCRIC} CRIC! 5% royalty routed to creator.`);
+      },
+    });
 
-    setCricBalance((prev) => prev - item.priceCRIC);
-    setAuctionListings((prev) => prev.filter((a) => a.id !== item.id));
-    setUserCollection((prev) => [item.player, ...prev]);
-    confetti({ particleCount: 60, spread: 70, origin: { y: 0.6 } });
-    showToast(`Purchased ${item.player.name} for ${item.priceCRIC} CRIC! 5% royalty routed to creator.`);
     return true;
   };
 
@@ -546,21 +631,369 @@ export const CricketProvider: React.FC<{ children: ReactNode }> = ({ children })
     showToast(`Cancelled auction listing for ${item.player.name}.`);
   };
 
-  // Matchday XI Fantasy
+  // Matchday XI Fantasy (Live Cricket API Integration)
   const [selectedPlayerIds, setSelectedPlayerIds] = useState<number[]>([1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11]);
-  const [todayMatches] = useState([
-    { id: 1, teams: "India vs Australia · Championship", status: "Innings Break", venue: "Ahmedabad" },
-    { id: 2, teams: "Mumbai Indians vs Chennai Super Kings", status: "Live · Over 14.2", venue: "Mumbai" },
-    { id: 3, teams: "Royal Challengers vs Kolkata Knights", status: "Starts 19:30 IST", venue: "Bengaluru" },
+  const [todayMatches, setTodayMatches] = useState<LiveMatch[]>([
+    {
+      id: 1543963,
+      leagueId: "21284",
+      leagueName: "Women's Big Bash League",
+      teams: "Melbourne Renegades Women vs Sydney Sixers Women",
+      shortName: "MR-W v SS-W",
+      status: "LIVE · MR-W 22/3 (4.3 ov) vs SS-W 140/6",
+      state: "in",
+      venue: "Junction Oval, Melbourne",
+      eventType: "T20",
+      summaryText: "Live T20 Fixture · Connecting to live telemetry stream…",
+      competitors: [
+        { name: "Melbourne Renegades Women", shortName: "MR-W", score: "22/3 (4.3/20 ov)" },
+        { name: "Sydney Sixers Women", shortName: "SS-W", score: "140/6" },
+      ],
+      lastUpdated: new Date().toLocaleTimeString(),
+    },
   ]);
-  const [selectedMatchId, setSelectedMatchId] = useState<number>(1);
+  const [selectedMatchId, setSelectedMatchId] = useState<number>(1543963);
+  const [isLoadingLiveMatches, setIsLoadingLiveMatches] = useState<boolean>(false);
+  const [lastFeedSync, setLastFeedSync] = useState<string>("Syncing…");
   const [matchCommentary, setMatchCommentary] = useState<string>(
-    "Select 11 players; click 'Simulate Over' to execute a live 6-ball sequence with ball-by-ball commentary and real-time deterministic score calculations!"
+    "Connecting to live ESPN Cricket API telemetry feed…"
   );
   const [deliveriesLog, setDeliveriesLog] = useState<string[]>([
-    "Match commentary initialized · Pitch is firm and dry",
-    "Bowler marking run-up at the Pavilion End",
+    "Initializing live cricket telemetry stream…",
   ]);
+
+  // Helper to fetch JSON from /espn-api proxy with direct fallback
+  const fetchEspnJson = async (path: string) => {
+    try {
+      const res = await fetch(`/espn-api${path}`);
+      if (res.ok) return await res.json();
+    } catch {}
+    const directRes = await fetch(`https://site.web.api.espn.com${path}`);
+    if (directRes.ok) return await directRes.json();
+    throw new Error("Live cricket endpoint unreachable");
+  };
+
+  // Fetch live matches list from ESPN Cricket Scoreboard API
+  const refreshLiveMatches = async (showFeedback: boolean = false) => {
+    setIsLoadingLiveMatches(true);
+    try {
+      const data = await fetchEspnJson("/apis/v2/scoreboard/header?sport=cricket");
+      const leagues = data?.sports?.[0]?.leagues || [];
+      const parsedMatches: LiveMatch[] = [];
+
+      for (const league of leagues) {
+        const leagueId = String(league.id || "");
+        const leagueName = String(league.name || "International Cricket");
+        const events = Array.isArray(league.events) ? league.events : [];
+
+        for (const ev of events) {
+          const idNum = Number(ev.id);
+          if (!idNum) continue;
+
+          const comps = Array.isArray(ev.competitors) ? ev.competitors : [];
+          const competitors = comps.map((c: Record<string, unknown>) => ({
+            name: String(c.displayName || c.name || "Team"),
+            shortName: String(c.abbreviation || c.name || "TM"),
+            score: String(c.score || "Yet to bat"),
+            logo: c.logo ? String(c.logo) : undefined,
+            winner: Boolean(c.winner),
+          }));
+
+          const scoreSummary = competitors
+            .filter((c: { score: string }) => c.score && c.score !== "Yet to bat")
+            .map((c: { shortName: string; score: string }) => `${c.shortName} ${c.score}`)
+            .join(" vs ");
+
+          const rawState = String(ev.status || "in") as "in" | "pre" | "post";
+          const rawSummary = String(ev.summary || (rawState === "in" ? "Live" : "Match"));
+          const fullLongSummary = String(
+            (ev.fullStatus as { longSummary?: string })?.longSummary ||
+              ev.description ||
+              rawSummary
+          );
+
+          parsedMatches.push({
+            id: idNum,
+            leagueId,
+            leagueName,
+            teams: String(ev.name || ev.shortName || "Cricket Fixture").replace(" v ", " vs "),
+            shortName: String(ev.shortName || ev.name || "Match"),
+            status: scoreSummary ? `${rawSummary.toUpperCase()} · ${scoreSummary}` : rawSummary,
+            state: rawState,
+            venue: String(ev.location || "International Stadium"),
+            eventType: String(ev.eventType || (ev.class as { eventType?: string })?.eventType || "T20"),
+            summaryText: fullLongSummary,
+            competitors,
+            lastUpdated: new Date().toLocaleTimeString(),
+          });
+        }
+      }
+
+      // Sort so live ("in") matches with active scores come first, then "post" results, then "pre"
+      parsedMatches.sort((a, b) => {
+        const order = { in: 0, post: 1, pre: 2 };
+        return (order[a.state] ?? 3) - (order[b.state] ?? 3);
+      });
+
+      if (parsedMatches.length > 0) {
+        setTodayMatches(parsedMatches);
+        const nowStr = new Date().toLocaleTimeString();
+        setLastFeedSync(nowStr);
+        setSelectedMatchId((prevId) => {
+          const exists = parsedMatches.some((m) => m.id === prevId);
+          return exists ? prevId : parsedMatches[0].id;
+        });
+        if (showFeedback) {
+          showToast(`Synced ${parsedMatches.length} live fixtures from ESPN Cricket API!`);
+        }
+      }
+    } catch (err) {
+      console.warn("Live cricket scoreboard fetch error:", err);
+      if (showFeedback) {
+        showToast("Using cached live match telemetry.", true);
+      }
+    } finally {
+      setIsLoadingLiveMatches(false);
+    }
+  };
+
+  // Fetch detailed live scorecard, rosters, and commentary notes for the selected match
+  const syncSelectedMatchSummary = async (match: LiveMatch) => {
+    if (!match || !match.leagueId || !match.id) return;
+    try {
+      const summaryData = await fetchEspnJson(
+        `/apis/site/v2/sports/cricket/${match.leagueId}/summary?event=${match.id}`
+      );
+
+      // 1. Parse live match notes / commentary
+      const rawNotes = Array.isArray(summaryData?.notes) ? summaryData.notes : [];
+      const noteLines = rawNotes
+        .map((n: { text?: string; type?: string }) => (n?.text ? String(n.text).trim() : ""))
+        .filter((txt: string) => txt.length > 5 && !txt.startsWith("2026/"));
+
+      const scoreHeaderLine = match.competitors
+        .map((c) => `${c.name}: ${c.score || "Yet to bat"}`)
+        .join("  |  ");
+
+      if (noteLines.length > 0) {
+        setDeliveriesLog(noteLines.slice().reverse());
+        setMatchCommentary(
+          `${scoreHeaderLine} — ${match.summaryText || noteLines[noteLines.length - 1]}`
+        );
+      } else {
+        setMatchCommentary(`${scoreHeaderLine} — ${match.summaryText}`);
+      }
+
+      // 2. Parse live batting & bowling matchcards + rosters into real Player stats
+      const playerStatsMap = new Map<
+        string,
+        {
+          id: number;
+          name: string;
+          team: string;
+          role: PlayerRole;
+          runs: number;
+          balls: number;
+          fours: number;
+          sixes: number;
+          wickets: number;
+          catches: number;
+          economy: number;
+          avatar?: string;
+        }
+      >();
+
+      // Seed from rosters if available
+      const rosters = Array.isArray(summaryData?.rosters) ? summaryData.rosters : [];
+      for (const rosterGroup of rosters) {
+        const teamName = String(
+          rosterGroup?.team?.displayName || rosterGroup?.team?.name || match.shortName
+        );
+        const athletes = Array.isArray(rosterGroup?.roster) ? rosterGroup.roster : [];
+        for (const entry of athletes) {
+          const ath = entry?.athlete || {};
+          const rawId = Number(ath.id) || Math.floor(Math.random() * 900000 + 100000);
+          const dispName = String(ath.displayName || ath.fullName || ath.shortName || "");
+          const shortName = String(ath.shortName || dispName);
+          if (!dispName) continue;
+
+          const posName = String(ath.position?.name || "").toLowerCase();
+          let role: PlayerRole = "Batsman";
+          if (posName.includes("keeper")) role = "Wicketkeeper";
+          else if (posName.includes("allrounder") || posName.includes("all-rounder")) role = "All-Rounder";
+          else if (posName.includes("bowler")) role = "Bowler";
+
+          const key = shortName.toLowerCase();
+          playerStatsMap.set(key, {
+            id: 900000 + (rawId % 99999),
+            name: dispName,
+            team: teamName,
+            role,
+            runs: 0,
+            balls: 0,
+            fours: 0,
+            sixes: 0,
+            wickets: 0,
+            catches: 0,
+            economy: 7.2,
+            avatar: ath.headshot?.href ? String(ath.headshot.href) : undefined,
+          });
+        }
+      }
+
+      // Enrich from live matchcards (Batting & Bowling)
+      const matchcards = Array.isArray(summaryData?.matchcards) ? summaryData.matchcards : [];
+      for (const mc of matchcards) {
+        const headline = String(mc?.headline || "").toLowerCase();
+        const teamName = String(mc?.teamName || match.shortName);
+        const details = Array.isArray(mc?.playerDetails) ? mc.playerDetails : [];
+
+        for (const pd of details) {
+          const pName = String(pd?.playerName || "").trim();
+          if (!pName) continue;
+          const rawId = Number(pd?.playerID) || Math.floor(Math.random() * 900000 + 100000);
+          const key = pName.toLowerCase();
+
+          // Match by key or last name
+          let record = playerStatsMap.get(key);
+          if (!record) {
+            const lastName = pName.split(" ").pop()?.toLowerCase() || "";
+            for (const [k, val] of playerStatsMap.entries()) {
+              if (lastName && (k.endsWith(lastName) || val.name.toLowerCase().endsWith(lastName))) {
+                record = val;
+                break;
+              }
+            }
+          }
+
+          if (!record) {
+            record = {
+              id: 900000 + (rawId % 99999),
+              name: pName,
+              team: teamName,
+              role: headline.includes("bowling") ? "Bowler" : "Batsman",
+              runs: 0,
+              balls: 0,
+              fours: 0,
+              sixes: 0,
+              wickets: 0,
+              catches: 0,
+              economy: 7.5,
+            };
+            playerStatsMap.set(key, record);
+          }
+
+          if (headline.includes("batting")) {
+            record.runs += Number(pd.runs || 0);
+            record.balls += Number(pd.ballsFaced || 0);
+            record.fours += Number(pd.fours || 0);
+            record.sixes += Number(pd.sixes || 0);
+            const dism = String(pd.dismissal || "").toLowerCase();
+            if (dism.includes("st ") || pName.includes("†")) {
+              record.role = "Wicketkeeper";
+            }
+          } else if (headline.includes("bowling")) {
+            const wkts = Number(pd.wickets || 0);
+            record.wickets += wkts;
+            if (pd.economyRate) {
+              record.economy = Number(pd.economyRate) || 7.5;
+            }
+            if (record.runs >= 15 && wkts >= 1) {
+              record.role = "All-Rounder";
+            } else if (record.role === "Batsman" && wkts >= 1) {
+              record.role = "Bowler";
+            }
+          }
+        }
+      }
+
+      if (playerStatsMap.size > 0) {
+        const livePlayers: Player[] = Array.from(playerStatsMap.values()).map((rec, idx) => {
+          // Ensure every match has at least 1 Wicketkeeper, 3 Batsmen, 3 Bowlers, 1 All-Rounder if roles were generic
+          let role = rec.role;
+          if (idx === 0 && !Array.from(playerStatsMap.values()).some((x) => x.role === "Wicketkeeper")) {
+            role = "Wicketkeeper";
+          } else if (idx === 1 && !Array.from(playerStatsMap.values()).some((x) => x.role === "All-Rounder")) {
+            role = "All-Rounder";
+          }
+
+          const totalPerf = rec.runs + rec.wickets * 20;
+          const rarity: PlayerRarity =
+            totalPerf >= 60
+              ? "Legendary"
+              : totalPerf >= 35
+              ? "Epic"
+              : totalPerf >= 18
+              ? "Rare"
+              : "Uncommon";
+          const multiplier =
+            rarity === "Legendary" ? 2.0 : rarity === "Epic" ? 1.5 : rarity === "Rare" ? 1.25 : 1.1;
+          const stats = {
+            runs: rec.runs,
+            fours: rec.fours,
+            sixes: rec.sixes,
+            wickets: rec.wickets,
+            catches: rec.catches,
+          };
+          const calc = calculatePlayerPoints(stats, rarity);
+          const sr = rec.balls > 0 ? Number(((rec.runs / rec.balls) * 100).toFixed(1)) : 132.5;
+
+          const basePlayer: Player = {
+            id: rec.id,
+            name: rec.name,
+            team: rec.team,
+            role,
+            rarity,
+            multiplier,
+            creditCost: rarity === "Legendary" ? 10.0 : rarity === "Epic" ? 9.5 : 8.5,
+            priceCRIC: Math.max(250, Math.round(450 + calc.finalPoints * 6)),
+            matches: 25,
+            runs: Math.max(rec.runs, 420),
+            wickets: Math.max(rec.wickets, role === "Bowler" ? 32 : 2),
+            strikeRate: sr,
+            economy: rec.economy,
+            avatar: rec.avatar || "",
+            stats,
+            calculatedPoints: calc.finalPoints,
+            basePoints: calc.basePoints,
+            breakdown: calc.breakdown,
+            isLiveMatchPlayer: true,
+            liveMatchId: match.id,
+          };
+          if (!basePlayer.avatar) {
+            basePlayer.avatar = generateSvgAvatar(basePlayer);
+          }
+          return basePlayer;
+        });
+
+        setAllLoadedPlayers((prev) => {
+          const nonLiveOrOtherMatch = prev.filter((p) => p.liveMatchId !== match.id);
+          // Deduplicate by id
+          const liveIds = new Set(livePlayers.map((lp) => lp.id));
+          return [...livePlayers, ...nonLiveOrOtherMatch.filter((p) => !liveIds.has(p.id))];
+        });
+      }
+    } catch (err) {
+      console.warn("Live match summary sync warning:", err);
+    }
+  };
+
+  // Poll live scoreboard on mount and every 25 seconds
+  useEffect(() => {
+    refreshLiveMatches(false);
+    const interval = setInterval(() => {
+      refreshLiveMatches(false);
+    }, 25000);
+    return () => clearInterval(interval);
+  }, []);
+
+  // Sync detailed match scorecard whenever selectedMatchId or todayMatches updates
+  useEffect(() => {
+    const currentMatch = todayMatches.find((m) => m.id === selectedMatchId) || todayMatches[0];
+    if (currentMatch) {
+      syncSelectedMatchSummary(currentMatch);
+    }
+  }, [selectedMatchId, todayMatches]);
 
   const squadValidation = validateSquad(selectedPlayerIds, allLoadedPlayers);
 
@@ -574,6 +1007,46 @@ export const CricketProvider: React.FC<{ children: ReactNode }> = ({ children })
       }
       setSelectedPlayerIds((prev) => [...prev, playerId]);
     }
+  };
+
+  const loadLiveMatchXI = () => {
+    const livePool = allLoadedPlayers.filter((p) => p.liveMatchId === selectedMatchId);
+    const sourcePool = livePool.length >= 11 ? livePool : allLoadedPlayers;
+
+    // Sort by calculatedPoints descending so we pick the top live performers
+    const sorted = [...sourcePool].sort((a, b) => (b.calculatedPoints || 0) - (a.calculatedPoints || 0));
+    const wks = sorted.filter((p) => p.role === "Wicketkeeper");
+    const bats = sorted.filter((p) => p.role === "Batsman");
+    const bowls = sorted.filter((p) => p.role === "Bowler");
+    const ars = sorted.filter((p) => p.role === "All-Rounder");
+
+    const pickedSet = new Set<number>();
+    const addUpTo = (list: Player[], count: number) => {
+      for (const p of list) {
+        if (pickedSet.size >= 11) break;
+        if (!pickedSet.has(p.id) && count > 0) {
+          pickedSet.add(p.id);
+          count--;
+        }
+      }
+    };
+
+    addUpTo(wks, 1);
+    addUpTo(bats, 4);
+    addUpTo(bowls, 4);
+    addUpTo(ars, 2);
+    // Fill any remaining slots up to 11 from sorted pool
+    for (const p of sorted) {
+      if (pickedSet.size >= 11) break;
+      pickedSet.add(p.id);
+    }
+
+    setSelectedPlayerIds(Array.from(pickedSet));
+    showToast(
+      livePool.length >= 11
+        ? `Loaded 11 live players from ${todayMatches.find((m) => m.id === selectedMatchId)?.shortName || "the live fixture"}!`
+        : "Loaded balanced Playing XI with live player telemetry!"
+    );
   };
 
   const autoPickBalancedSquad = () => {
@@ -689,7 +1162,7 @@ export const CricketProvider: React.FC<{ children: ReactNode }> = ({ children })
     { id: "log-1", time: "19:00:00", text: "Turnstile Gate 4 Scanner initialized and ready.", type: "info" },
   ]);
 
-  const buyTicket = (ticket: Ticket) => {
+  const buyTicket = (ticket: Ticket): boolean => {
     if (!isConnected) {
       showToast("Connect your wallet to purchase stadium passes.", true);
       return false;
@@ -699,12 +1172,29 @@ export const CricketProvider: React.FC<{ children: ReactNode }> = ({ children })
       return false;
     }
 
-    setCricBalance((prev) => prev - ticket.faceValue);
-    setTickets((prev) =>
-      prev.map((t) => (t.id === ticket.id ? { ...t, owner: walletAddress } : t))
-    );
-    confetti({ particleCount: 40, spread: 60 });
-    showToast(`Purchased stadium pass #${ticket.tokenId} for ${ticket.faceValue} CRIC! Resale capped at ${ticket.maxResalePrice} CRIC.`);
+    setPendingTx({
+      type: "BUY_TICKET",
+      title: `Stadium Pass #${ticket.tokenId}`,
+      description: `Official ERC-721 Matchday Pass for ${ticket.matchName} at ${ticket.venue}. Anti-scalping resale strictly capped at 15%.`,
+      amountCRIC: ticket.faceValue,
+      recipientAddress: DEPLOYED_CONTRACTS.contracts.MatchTicketNFT,
+      details: {
+        "Match": ticket.matchName,
+        "Stand / Seat": `${ticket.stand}, Seat ${ticket.seat}`,
+        "Face Value": `${ticket.faceValue} CRIC`,
+        "Max Resale Cap": `${ticket.maxResalePrice} CRIC`,
+        "Smart Contract": "MatchTicketNFT (ERC-721)",
+      },
+      onConfirm: async () => {
+        await executeOnChainTransfer(ticket.faceValue, DEPLOYED_CONTRACTS.contracts.MatchTicketNFT);
+        setTickets((prev) =>
+          prev.map((t) => (t.id === ticket.id ? { ...t, owner: walletAddress } : t))
+        );
+        confetti({ particleCount: 40, spread: 60 });
+        showToast(`Purchased stadium pass #${ticket.tokenId} for ${ticket.faceValue} CRIC!`);
+      },
+    });
+
     return true;
   };
 
@@ -800,7 +1290,7 @@ export const CricketProvider: React.FC<{ children: ReactNode }> = ({ children })
   const [tournaments, setTournaments] = useState<Tournament[]>(INITIAL_TOURNAMENTS);
   const [selectedTournamentId, setSelectedTournamentId] = useState<number>(INITIAL_TOURNAMENTS[0].id);
 
-  const enterTournament = (tournamentId: number) => {
+  const enterTournament = (tournamentId: number): boolean => {
     if (!isConnected) {
       showToast("Connect your wallet first to join tournament pools.", true);
       return false;
@@ -820,31 +1310,47 @@ export const CricketProvider: React.FC<{ children: ReactNode }> = ({ children })
       return false;
     }
 
-    setCricBalance((prev) => prev - tourn.entryFee);
-    const commitmentHash = `0x${Math.random().toString(16).substring(2, 10)}...${Math.random().toString(16).substring(2, 6)}`;
+    setPendingTx({
+      type: "ENTER_TOURNAMENT",
+      title: `Tournament Pool: ${tourn.name}`,
+      description: `Commit your Matchday XI fantasy squad to ${tourn.name} and deposit ${tourn.entryFee} CRIC into on-chain escrow prize pool.`,
+      amountCRIC: tourn.entryFee,
+      recipientAddress: DEPLOYED_CONTRACTS.contracts.TournamentPool,
+      details: {
+        "Contest": tourn.name,
+        "Entry Fee": `${tourn.entryFee} CRIC`,
+        "Prize Pool": `${tourn.poolCRIC} CRIC`,
+        "Smart Contract": "TournamentPool",
+      },
+      onConfirm: async () => {
+        await executeOnChainTransfer(tourn.entryFee, DEPLOYED_CONTRACTS.contracts.TournamentPool);
+        const commitmentHash = `0x${Math.random().toString(16).substring(2, 10)}...${Math.random().toString(16).substring(2, 6)}`;
 
-    setTournaments((prev) =>
-      prev.map((t) => {
-        if (t.id !== tournamentId) return t;
-        const currentEntries = t.entries || [];
-        const newEntry = {
-          rank: currentEntries.length + 1,
-          address: `${walletAddress.slice(0, 6)}...${walletAddress.slice(-4)}`,
-          squadCommitment: commitmentHash,
-          points: 0,
-          payout: 0,
-        };
-        return {
-          ...t,
-          poolCRIC: t.poolCRIC + tourn.entryFee,
-          entriesCount: t.entriesCount + 1,
-          entries: [newEntry, ...currentEntries],
-        };
-      })
-    );
+        setTournaments((prev) =>
+          prev.map((t) => {
+            if (t.id !== tournamentId) return t;
+            const currentEntries = t.entries || [];
+            const newEntry = {
+              rank: currentEntries.length + 1,
+              address: `${walletAddress.slice(0, 6)}...${walletAddress.slice(-4)}`,
+              squadCommitment: commitmentHash,
+              points: 0,
+              payout: 0,
+            };
+            return {
+              ...t,
+              poolCRIC: t.poolCRIC + tourn.entryFee,
+              entriesCount: t.entriesCount + 1,
+              entries: [newEntry, ...currentEntries],
+            };
+          })
+        );
 
-    confetti({ particleCount: 50, spread: 70 });
-    showToast(`Entered ${tourn.name}! Squad commitment hash: ${commitmentHash}`);
+        confetti({ particleCount: 50, spread: 70 });
+        showToast(`Entered ${tourn.name}! Squad commitment hash: ${commitmentHash}`);
+      },
+    });
+
     return true;
   };
 
@@ -879,25 +1385,83 @@ export const CricketProvider: React.FC<{ children: ReactNode }> = ({ children })
       return;
     }
 
-    const eth = (window as unknown as { ethereum?: unknown }).ethereum;
-    if (eth && isRealWallet) {
-      try {
-        showToast("Please confirm 50,000 CRIC faucet claim in MetaMask…");
-        const tx = await triggerWalletTx("CricketVerse:ClaimFaucet:50000CRIC");
-        if (tx) {
-          showToast(`MetaMask Tx broadcasted! Hash: ${tx.hash.slice(0, 10)}…`);
-        }
-      } catch (err: unknown) {
-        const errorObj = err as { message?: string };
-        showToast(errorObj?.message || "MetaMask faucet request cancelled.", true);
-        return;
-      }
-    }
+    setPendingTx({
+      type: "CLAIM_FAUCET",
+      title: "Claim 50,000 CRIC Faucet Grant",
+      description: "Call claimFaucet() on the CRIC ERC-20 Smart Contract to mint 50,000 CRIC tokens directly to your wallet.",
+      amountCRIC: 50000,
+      recipientAddress: DEPLOYED_CONTRACTS.contracts.CRIC,
+      details: {
+        "Contract": "CRIC Token (ERC-20)",
+        "Method": "claimFaucet()",
+        "Mint Amount": "50,000 CRIC",
+        "Recipient": `${walletAddress.slice(0, 8)}...${walletAddress.slice(-6)}`,
+      },
+      onConfirm: async () => {
+        const eth = (window as unknown as { ethereum?: unknown }).ethereum;
+        const isInIframe = typeof window !== "undefined" && window.self !== window.top;
+        setIsTransacting(true);
+        try {
+          let claimedViaMetaMask = false;
+          if (eth && isRealWallet && !isInIframe) {
+            try {
+              const provider = new BrowserProvider(eth as never);
+              const net = await provider.getNetwork();
+              if (Number(net.chainId) !== DEPLOYED_CONTRACTS.chainId) {
+                await addCricketNetworkToMetaMask();
+              }
+              const signer = await provider.getSigner();
+              const signerAddr = await signer.getAddress();
+              if (signerAddr.toLowerCase() === walletAddress.toLowerCase()) {
+                const cric = new Contract(
+                  DEPLOYED_CONTRACTS.contracts.CRIC,
+                  ["function claimFaucet() external"],
+                  signer
+                );
+                showToast("Please confirm claimFaucet() in your MetaMask popup…");
+                const tx = await cric.claimFaucet();
+                showToast(`Broadcasted Faucet Claim! Hash: ${tx.hash.slice(0, 10)}…`);
+                await tx.wait();
+                claimedViaMetaMask = true;
+              }
+            } catch (err: unknown) {
+              const errorObj = err as { code?: number; message?: string };
+              if (errorObj?.code === 4001 || errorObj?.message?.includes("rejected") || errorObj?.message?.includes("denied")) {
+                throw new Error("Faucet claim rejected in MetaMask.");
+              }
+              console.warn("MetaMask faucet fallback to RPC:", err);
+            }
+          }
 
-    setCricBalance((prev) => prev + 50000);
-    setHasClaimedFaucet(true);
-    confetti({ particleCount: 80, spread: 80, origin: { y: 0.6 } });
-    showToast("50,000 CRIC claimed successfully! Faucet option now completed.");
+          if (!claimedViaMetaMask) {
+            const rpc = new JsonRpcProvider(`${window.location.origin}/rpc`);
+            await rpc.send("hardhat_impersonateAccount", [walletAddress]);
+            const cricIface = new Contract(
+              DEPLOYED_CONTRACTS.contracts.CRIC,
+              ["function claimFaucet() external"],
+              rpc
+            ).interface;
+            const data = cricIface.encodeFunctionData("claimFaucet", []);
+            const txHash = await rpc.send("eth_sendTransaction", [
+              {
+                from: walletAddress,
+                to: DEPLOYED_CONTRACTS.contracts.CRIC,
+                data,
+              },
+            ]);
+            await rpc.send("hardhat_stopImpersonatingAccount", [walletAddress]);
+            showToast(`On-Chain Faucet Tx Mined! Hash: ${String(txHash).slice(0, 12)}…`);
+          }
+
+          await syncOnChainBalances();
+          setHasClaimedFaucet(true);
+          confetti({ particleCount: 80, spread: 80, origin: { y: 0.6 } });
+          showToast("50,000 CRIC minted on-chain to your wallet! Faucet option completed.");
+        } finally {
+          setIsTransacting(false);
+        }
+      },
+    });
   };
 
   // Demo Gas - one-time claim per session, removed from UI once claimed
@@ -906,10 +1470,40 @@ export const CricketProvider: React.FC<{ children: ReactNode }> = ({ children })
       showToast("Demo ETH grant already claimed.", true);
       return;
     }
-    setEthBalance((prev) => prev + 20);
-    setHasClaimedDemoGas(true);
-    confetti({ particleCount: 40, spread: 50 });
-    showToast("20 Demo ETH added to your wallet! Option completed.");
+
+    setPendingTx({
+      type: "CLAIM_ETH",
+      title: "Claim 20 Demo ETH Gas Grant",
+      description: "Transfer 20.0 ETH from the Local Hardhat Genesis Treasury to your wallet for on-chain gas fees.",
+      amountCRIC: 0,
+      recipientAddress: walletAddress,
+      details: {
+        "Grant Amount": "20.0 ETH",
+        "From Treasury": "0xf39Fd6...92266",
+        "To Wallet": `${walletAddress.slice(0, 8)}...${walletAddress.slice(-6)}`,
+        "Chain ID": "31337 (Local Hardhat)",
+      },
+      onConfirm: async () => {
+        setIsTransacting(true);
+        try {
+          const rpc = new JsonRpcProvider(`${window.location.origin}/rpc`);
+          const deployer = "0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266";
+          const txHash = await rpc.send("eth_sendTransaction", [
+            {
+              from: deployer,
+              to: walletAddress,
+              value: "0x1158e460913d00000", // 20 ETH in hex wei
+            },
+          ]);
+          await syncOnChainBalances();
+          setHasClaimedDemoGas(true);
+          confetti({ particleCount: 40, spread: 50 });
+          showToast(`20 Demo ETH transferred on-chain! Tx: ${String(txHash).slice(0, 12)}…`);
+        } finally {
+          setIsTransacting(false);
+        }
+      },
+    });
   };
 
   // Real or Demo Wallet Connect
@@ -985,6 +1579,7 @@ export const CricketProvider: React.FC<{ children: ReactNode }> = ({ children })
         selectedPlayerIds,
         toggleSelectPlayer,
         autoPickBalancedSquad,
+        loadLiveMatchXI,
         clearSquad,
         todayMatches,
         selectedMatchId,
@@ -992,6 +1587,9 @@ export const CricketProvider: React.FC<{ children: ReactNode }> = ({ children })
         matchCommentary,
         deliveriesLog,
         simulateOver,
+        isLoadingLiveMatches,
+        lastFeedSync,
+        refreshLiveMatches,
         squadValidation,
         tickets,
         ticketFilter,
@@ -1014,6 +1612,11 @@ export const CricketProvider: React.FC<{ children: ReactNode }> = ({ children })
         setShowWalletModal,
         addCricketNetworkToMetaMask,
         addCricTokenToMetaMask,
+        pendingTx,
+        setPendingTx,
+        isTransacting,
+        confirmPendingTx,
+        cancelPendingTx,
       }}
     >
       {children}

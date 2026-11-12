@@ -21,11 +21,11 @@ export const PollsTab: React.FC = () => {
 
   return (
     <section id="section-polls" className="view-panel active">
-      <div className="section-hero">
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", flexWrap: "wrap", gap: "12px" }}>
+      <div className="section-hero section-hero-split">
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: "16px", width: "100%" }}>
           <div>
             <span className="hero-kicker">COMMUNITY GOVERNANCE</span>
-            <h2 className="hero-title">Fan polls</h2>
+            <h2 className="hero-title" style={{ marginBottom: "6px" }}>Fan Polls</h2>
             <p className="hero-sub">
               Decentralized cricket fan governance where every CRIC token empowers your voice in matchday decisions.
             </p>
@@ -36,7 +36,7 @@ export const PollsTab: React.FC = () => {
             type="button"
             onClick={() => setShowCreate(!showCreate)}
           >
-            {showCreate ? "Cancel" : "Create New Poll"}
+            {showCreate ? "Cancel" : "+ Create New Poll"}
           </button>
         </div>
       </div>
