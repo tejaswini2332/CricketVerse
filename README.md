@@ -16,7 +16,7 @@
 
 ---
 
-## 📌 Executive Summary & Value Proposition
+## Executive Summary & Value Proposition
 
 The global sports economy represents an estimated **$12.8 billion market**, spanning memorabilia, fantasy sports, broadcasting, and stadium ticketing. However, legacy Web2 solutions suffer from four systemic vulnerabilities:
 
@@ -34,7 +34,7 @@ The global sports economy represents an estimated **$12.8 billion market**, span
 
 ---
 
-## 🏛️ System Architecture
+## System Architecture
 
 ```
 +---------------------------------------------------------------------------------------+
@@ -69,7 +69,7 @@ The global sports economy represents an estimated **$12.8 billion market**, span
 
 ---
 
-## ⚡ Core Features
+## Core Features
 
 ### 1. The Pavilion (Dynamic Player Collectibles)
 - **Extensive Athlete Catalog:** International and franchise cricketers with verified historical and live career statistics (matches, runs, wickets, strike rate, economy).
@@ -128,7 +128,7 @@ The global sports economy represents an estimated **$12.8 billion market**, span
 
 ---
 
-## 📦 Smart Contract Architecture & Deployed Addresses
+## Smart Contract Architecture & Deployed Addresses
 
 All 8 smart contracts are deployed on the local Cancun Hardhat EVM (Chain ID `31337`) and ready for Polygon Amoy Layer 2:
 
@@ -145,7 +145,7 @@ All 8 smart contracts are deployed on the local Cancun Hardhat EVM (Chain ID `31
 
 ---
 
-## 🚀 Step-by-Step Installation & Setup Guide
+## Step-by-Step Installation & Setup Guide
 
 ### Prerequisites
 - **Node.js:** v18.0.0 or higher
@@ -378,18 +378,8 @@ cricketverse/
 └── package.json                  # Dependencies and execution scripts
 ```
 
----
-
-## 📄 Academic Capstone Dissertation (15 Pages)
-
-For academic evaluation and technical documentation, the complete **15-page dissertation** compiled by **Tejaswini Kunkulagunta (Roll No: CS23B032)** is included in two formats:
-- **Markdown Document:** [`public/CricketVerse_Project_Report.md`](public/CricketVerse_Project_Report.md)
-- **Microsoft Word Document:** [`public/CricketVerse_Final_Capstone_Report.docx`](public/CricketVerse_Final_Capstone_Report.docx)
-
----
-
 ## 📜 License
 
 This project is licensed under the **MIT License** — see the [LICENSE](LICENSE) file for details.
 
-Developed with ❤️ for the global cricket community by **Tejaswini Kunkulagunta (Roll No: CS23B032)**.
+Developed with ❤️ for the global cricket community by **Tejaswini Kunkulagunta**.
