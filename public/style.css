@@ -426,15 +426,23 @@ body.cricket-day-theme {
 
 .card-rarity-tag {
   position: absolute;
-  top: 14px;
-  left: 14px;
-  padding: 4px 10px;
+  top: 12px;
+  left: 12px;
+  padding: 3px 8px;
   border-radius: 6px;
-  font-size: 0.72rem;
+  font-size: 0.68rem;
   font-weight: 800;
-  letter-spacing: 1px;
+  letter-spacing: 0.5px;
   text-transform: uppercase;
   backdrop-filter: blur(8px);
+  width: auto !important;
+  max-width: max-content !important;
+  display: inline-flex !important;
+  align-items: center;
+  justify-content: center;
+  white-space: nowrap !important;
+  box-sizing: border-box;
+  line-height: 1.2;
 }
 
 .rarity-legendary {

@@ -1,0 +1,8 @@
+{
+  "name": "CricketVerse | Premier Cricket Arena",
+  "description": "Cricket collectibles, dynamic NFT player cards, fantasy XI matchday arena, anti-scalping tickets, auction room, and fan governance.",
+  "permissions": [],
+  "capabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}
