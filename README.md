@@ -9,7 +9,7 @@
 [![Test Suite](https://img.shields.io/badge/Tests-47%2F47_Passing_(100%25)-16A34A)](#testing--verification-suite)
 [![License](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 
-> **Academic Capstone Dissertation**  
+> **CS6666 Course Project**  
 > **Author / Lead Engineer:** Tejaswini Kunkulagunta (Roll No: `CS23B032`)  
 > **Department:** Department of Computer Science & Engineering  
 > **Target Network:** Cancun EVM (Hardhat Local Chain ID `31337`) / Polygon Amoy L2  
@@ -234,92 +234,6 @@ CricketVerse features a rigorous test suite containing **47 automated tests** sp
 # Run the complete test suite
 npx hardhat test
 ```
-
-### Test Suite Results Breakdown (100% Pass Rate):
-```
-  CricketVerse Web3 Ecosystem - Smart Contract Test Suite
-    1. CRIC Utility Token (ERC-20)
-      ✔ Should deploy with correct name, symbol, and initial genesis supply
-      ✔ Should allow users to claim from test faucet (50,000 CRIC)
-      ✔ Should reject faucet spam within cooldown period
-    2. Dynamic Player Card NFTs (ERC-721)
-      ✔ Should register card with accurate rarity and multiplier
-      ✔ Should enforce supply caps on Legendary cards (Max 25)
-      ✔ Should dynamically update athletic telemetry stats
-    3. Anti-Scalping Match Tickets (ERC-1155)
-      ✔ Should calculate maximum resale price ceiling at exactly 115% (+15%)
-      ✔ Should correctly validate if resale prices conform to anti-scalping limits
-      ✔ Should allow authorized gatekeeper to perform one-time redemption
-      ✔ Should prevent double-entry / duplicate gate redemption
-    4. Non-Custodial P2P Marketplace Engine
-      ✔ Should list and execute atomic purchase of player card with 5% royalty fee
-      ✔ Should enforce anti-scalping price ceiling on ticket listings
-      ✔ Should allow seller to cancel listing and retrieve escrowed asset
-
-  CricketVerse Phase 2 - Ecosystem Test Suite
-    1. Dynamic On-Chain SVG Card Generator
-      ✔ Should generate on-chain SVG with correct rarity colors
-      ✔ Should dynamically generate CENTURION achievement badge for >= 100 runs
-      ✔ Should dynamically generate 5-WKT HAUL and ECONOMY KING badges for bowlers
-      ✔ Should render complete SVG containing cricketer details and formatting
-      ✔ Should generate RFC-2397 base64 Data URI metadata format
-    2. Primary card sale
-      ✔ Should charge CRIC and mint registered card to the buyer
-    3. Chainlink / Sports Oracle Consumer
-      ✔ Should dispatch an oracle request and emit StatsRequested event
-      ✔ Should reject fulfillment from unauthorized callers
-      ✔ Should fulfill request from authorized oracle relayer and mutate player card stats
-      ✔ Should prevent double fulfillment of the same request ID
-    4. Tournament Escrow Prize Pool Smart Contract
-      ✔ Should create tournament with correct state and parameters
-      ✔ Should allow fans to approve CRIC and join tournament escrow
-      ✔ Should prevent duplicate registration by the same user
-      ✔ Should reject a payout to an address that did not join
-      ✔ Should reject settlement while entries are open
-      ✔ Should reject duplicate winners in a payout
-      ✔ Should distribute prizes: 5% platform fee to treasury, 95% net to winners
-      ✔ Should pay the full net prize pool despite share rounding
-      ✔ Should allow 100% full refund if tournament is cancelled due to rain
-
-  CricketVerse Phase 3 - Security Audit, Gas Profiling & Resilience
-    1. Gas Consumption Benchmarks (Cancun EVM viaIR)
-      ✔ Benchmark: CRIC ERC-20 Transfer (34,432 gas)
-      ✔ Benchmark: PlayerCardNFT Registration (215,196 gas) & Minting (96,884 gas)
-      ✔ Benchmark: MatchTicketNFT Mint (284,795 gas) & Anti-Scalping Gate Check-in (80,299 gas)
-      ✔ Benchmark: CricketMarketplace Listing (259,060 gas) & Atomic Settlement (151,243 gas)
-      ✔ Benchmark: Oracle Telemetry Mutation (71,180 gas)
-      ✔ Benchmark: Tournament Escrow (206,906 gas join, 107,027 gas settle)
-    2. Security Audit & Attack Vector Verification
-      ✔ SEC-01: Should strictly reject ticket scalping above 115% ceiling
-      ✔ SEC-02: Should prevent double gate entry / ticket replay attack
-      ✔ SEC-03: Should reject gate check-in from unauthorized addresses
-      ✔ SEC-04: Should enforce supply caps on Legendary cards (Max 25 limit)
-      ✔ SEC-05: Should reject dynamic player stats updates from unauthorized caller
-      ✔ SEC-06: Should prevent double fulfillment of Oracle requests
-      ✔ SEC-07: Should protect tournament funds and refund 100% on weather cancellation
-
-  CricketVerse On-Chain Community Features
-    ✔ Records one vote per wallet on-chain and closes polls
-    ✔ Stores fixture start and end times with ticket metadata
-
-  47 passing (3s)
-```
-
----
-
-## 📊 Gas Profiling & L2 Scalability Benchmark
-
-| Operation | EVM Gas Used | Cost on Ethereum L1 ($2,800 ETH, 25 Gwei) | Cost on Polygon Amoy L2 ($0.60 MATIC, 30 Gwei) | Savings on L2 |
-|---|---|---|---|---|
-| **$CRIC Token Transfer** | 34,432 | $2.41 | $0.00062 | **3,900x Cheaper** |
-| **Mint Player Card NFT** | 96,884 | $6.78 | $0.00174 | **3,900x Cheaper** |
-| **Issue Stadium Pass** | 284,795 | $19.93 | $0.00512 | **3,900x Cheaper** |
-| **Turnstile Gate Check-in** | 80,299 | $5.62 | $0.00144 | **3,900x Cheaper** |
-| **Marketplace Atomic Buy** | 151,243 | $10.58 | $0.00272 | **3,900x Cheaper** |
-| **Oracle Stats Mutation** | 71,180 | $4.98 | $0.00128 | **3,900x Cheaper** |
-| **Tournament Join (ZK)** | 206,906 | $14.48 | $0.00372 | **3,900x Cheaper** |
-| **Tournament 95/5 Settlement** | 107,027 | $7.49 | $0.00192 | **3,900x Cheaper** |
-
 ---
 
 ## 📁 Repository Directory Structure
