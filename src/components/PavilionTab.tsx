@@ -1,6 +1,7 @@
 import React from "react";
 import { useCricket } from "../context/CricketContext";
 import { PlayerRarity } from "../types";
+import { generateSvgAvatar } from "../scoringEngine";
 
 const RARITY_FILTERS: { label: string; value: string }[] = [
   { label: "All Squad", value: "all" },
@@ -32,19 +33,19 @@ export const PavilionTab: React.FC = () => {
 
   return (
     <section id="section-cards" className="view-panel active">
-      <div className="section-hero">
+      <div className="section-hero" style={{ marginBottom: "20px" }}>
         <div className="hero-header-flex">
           <div>
             <span className="hero-kicker">COLLECTIBLES</span>
-            <h1 className="hero-title">Player cards</h1>
-            <p className="hero-sub">
-              Collect your cricket greats from our 4,800+ international & domestic player catalog.
+            <h1 className="hero-title" style={{ fontSize: "1.85rem", marginBottom: "4px" }}>Player Cards</h1>
+            <p className="hero-sub" style={{ fontSize: "0.9rem" }}>
+              Collect your cricket greats from our comprehensive catalog of international & domestic cricketers.
             </p>
           </div>
         </div>
 
-        <div className="filters-search-bar">
-          <div className="filter-pills">
+        <div className="filters-search-bar" style={{ display: "flex", justifyContent: "space-between", alignItems: "center", width: "100%", gap: "12px", flexWrap: "wrap", marginTop: "8px" }}>
+          <div className="filter-pills" style={{ margin: 0 }}>
             {RARITY_FILTERS.map((f) => (
               <button
                 key={f.value}
@@ -60,12 +61,12 @@ export const PavilionTab: React.FC = () => {
             ))}
           </div>
 
-          <div className="search-box-wrapper">
+          <div className="search-box-wrapper" style={{ maxWidth: "340px", margin: 0 }}>
             <input
               type="text"
               id="pavilion-search-input"
               className="input-search"
-              placeholder="Search players by name, team, or country…"
+              placeholder="Search by player, team, country…"
               value={searchQuery}
               onChange={(e) => {
                 setSearchQuery(e.target.value);
@@ -77,13 +78,13 @@ export const PavilionTab: React.FC = () => {
       </div>
 
       {isLoadingPlayers && players.length === 0 ? (
-        <div className="empty-state" style={{ padding: "48px 16px" }}>
-          Loading 4,800+ cricketers database…
+        <div className="empty-state" style={{ padding: "40px 16px" }}>
+          Loading cricketers catalog…
         </div>
       ) : players.length === 0 ? (
-        <div style={{ textAlign: "center", padding: "64px 16px", color: "var(--text-dim)" }}>
-          <h3 style={{ fontSize: "1.25rem", marginBottom: "8px" }}>No players found matching your criteria</h3>
-          <p>Try clearing your search query or choosing a different rarity tier.</p>
+        <div style={{ textAlign: "center", padding: "48px 16px", color: "var(--text-dim)" }}>
+          <h3 style={{ fontSize: "1.15rem", marginBottom: "6px" }}>No players found matching your criteria</h3>
+          <p style={{ fontSize: "0.85rem" }}>Try clearing your search query or choosing a different rarity tier.</p>
         </div>
       ) : (
         <div id="cards-grid" className="cards-grid">
@@ -91,15 +92,16 @@ export const PavilionTab: React.FC = () => {
             const rarityClass = `rarity-${p.rarity.toLowerCase()}`;
             return (
               <div key={p.id} className="player-card" data-id={p.id}>
-                <div className="card-banner">
+                <div className="card-banner" style={{ height: "165px" }}>
                   <img
                     className="card-img"
                     src={p.avatar}
                     alt={p.name}
                     loading="lazy"
                     onError={(e) => {
-                      // Fallback to inline SVG avatar
-                      (e.target as HTMLImageElement).src = `https://api.dicebear.com/7.x/identicon/svg?seed=${encodeURIComponent(p.name)}`;
+                      const target = e.currentTarget;
+                      target.onerror = null;
+                      target.src = generateSvgAvatar(p);
                     }}
                   />
                   <span className={`card-rarity-tag ${rarityClass}`}>{p.rarity}</span>

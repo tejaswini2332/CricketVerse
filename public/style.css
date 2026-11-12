@@ -2293,4 +2293,295 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
 .organizer-form-grid button { min-height: 42px; }
 @media (max-width: 640px) { .organizer-form-grid { grid-template-columns: 1fr; } }
 
+/* Stadium Gate Turnstile Laser Scanner */
+@keyframes laser-scan {
+  0% { top: 6px; opacity: 0.95; }
+  50% { top: calc(100% - 8px); opacity: 1; }
+  100% { top: 6px; opacity: 0.95; }
+}
+
+.scan-laser {
+  position: absolute;
+  left: 0;
+  width: 100%;
+  height: 3px;
+  background: #22c55e;
+  box-shadow: 0 0 12px #22c55e, 0 0 20px #4ade80;
+  animation: laser-scan 2.2s infinite ease-in-out;
+  pointer-events: none;
+  z-index: 10;
+}
+
+.ticket-pass-card {
+  position: relative;
+  background: #ffffff;
+  border-radius: 16px;
+  border: 1px solid var(--card-border);
+  padding: 18px;
+  box-shadow: var(--shadow-card);
+  transition: transform 0.2s ease, box-shadow 0.2s ease, border-color 0.2s ease;
+  display: flex;
+  flex-direction: column;
+}
+
+.ticket-pass-card:hover {
+  transform: translateY(-2px);
+  box-shadow: var(--shadow-hover);
+  border-color: var(--turf-green-border);
+}
+
+.ticket-qr-thumb {
+  width: 58px;
+  height: 58px;
+  border-radius: 8px;
+  background: #ffffff;
+  padding: 4px;
+  border: 1px solid #e2e8f0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+/* ==================== 15-Page Academic Project Report Styling ==================== */
+.report-container {
+  max-width: 1040px;
+  margin: 0 auto;
+}
+
+.report-toolbar-card {
+  background: #ffffff;
+  border: 1px solid var(--card-border);
+  border-radius: 16px;
+  padding: 20px 24px;
+  margin-bottom: 24px;
+  box-shadow: var(--shadow-card);
+}
+
+.report-paper-page {
+  background: #ffffff;
+  border: 1px solid #e2e8f0;
+  border-radius: 18px;
+  padding: 48px clamp(24px, 5vw, 64px);
+  margin-bottom: 28px;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.05);
+  position: relative;
+  line-height: 1.7;
+  color: #1e293b;
+}
+
+.report-page-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding-bottom: 14px;
+  margin-bottom: 28px;
+  border-bottom: 1.5px solid #e2e8f0;
+  font-size: 0.76rem;
+  color: #64748b;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  font-weight: 600;
+}
+
+.page-number-tag {
+  background: #f1f5f9;
+  padding: 3px 10px;
+  border-radius: 12px;
+  color: #0f172a;
+  font-weight: 800;
+  font-family: var(--font-mono);
+}
+
+.report-title-section {
+  margin-bottom: 24px;
+}
+
+.chapter-label {
+  display: inline-block;
+  font-size: 0.75rem;
+  font-weight: 800;
+  color: var(--turf-green-dark);
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  margin-bottom: 6px;
+}
+
+.page-title {
+  font-size: clamp(1.4rem, 2.5vw, 1.85rem);
+  font-weight: 900;
+  color: var(--cricket-navy-dark);
+  line-height: 1.25;
+  margin-bottom: 4px;
+}
+
+.page-subtitle {
+  font-size: 0.92rem;
+  color: var(--text-dim);
+  font-weight: 500;
+}
+
+.section-heading {
+  font-size: 1.15rem;
+  font-weight: 800;
+  color: var(--cricket-navy-dark);
+  margin: 24px 0 10px;
+  padding-bottom: 6px;
+  border-bottom: 1px solid #f1f5f9;
+}
+
+.academic-header-box {
+  background: #f8fafc;
+  border: 1px solid #cbd5e1;
+  border-radius: 14px;
+  padding: 24px;
+  margin-bottom: 24px;
+}
+
+.university-kicker {
+  font-size: 0.72rem;
+  font-weight: 800;
+  color: #475569;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  margin-bottom: 8px;
+}
+
+.report-main-title {
+  font-size: clamp(1.3rem, 2.3vw, 1.7rem);
+  font-weight: 900;
+  color: var(--cricket-navy-dark);
+  line-height: 1.3;
+  margin-bottom: 16px;
+}
+
+.report-meta-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  gap: 8px 18px;
+  font-size: 0.84rem;
+  color: #334155;
+  border-top: 1px dashed #cbd5e1;
+  padding-top: 14px;
+}
+
+.academic-callout {
+  background: #f0fdf4;
+  border-left: 4px solid var(--turf-green);
+  border-radius: 0 10px 10px 0;
+  padding: 14px 18px;
+  margin: 16px 0;
+  font-size: 0.88rem;
+  color: #166534;
+}
+
+.academic-callout p {
+  margin: 4px 0 0;
+  color: #1e293b;
+}
+
+.report-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.84rem;
+  margin: 18px 0;
+}
+
+.report-table th {
+  background: #0f172a;
+  color: #f8fafc;
+  padding: 10px 12px;
+  text-align: left;
+  font-weight: 700;
+  font-size: 0.78rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.report-table td {
+  padding: 10px 12px;
+  border-bottom: 1px solid #e2e8f0;
+  color: #334155;
+}
+
+.report-table tr:nth-child(even) td {
+  background: #f8fafc;
+}
+
+.code-block-display {
+  background: #0f172a;
+  color: #38bdf8;
+  font-family: var(--font-mono);
+  font-size: 0.78rem;
+  line-height: 1.5;
+  padding: 16px;
+  border-radius: 10px;
+  overflow-x: auto;
+  margin: 16px 0;
+  border: 1px solid #1e293b;
+}
+
+.architecture-diagram-box {
+  background: #020617;
+  border: 1px solid #1e293b;
+  border-radius: 12px;
+  padding: 16px;
+  overflow-x: auto;
+  margin: 18px 0;
+}
+
+.academic-references-list p {
+  font-size: 0.82rem;
+  line-height: 1.55;
+  margin-bottom: 10px;
+  padding-left: 24px;
+  text-indent: -24px;
+  color: #334155;
+}
+
+@media print {
+  body {
+    background: #ffffff !important;
+    color: #000000 !important;
+    font-size: 10.5pt !important;
+  }
+  .app-header,
+  .sub-nav,
+  .report-toolbar-card,
+  .report-page-footer,
+  .wallet-help-modal,
+  #tx-confirmation-modal,
+  .toast-container {
+    display: none !important;
+  }
+  .main-layout {
+    padding: 0 !important;
+    margin: 0 !important;
+    max-width: 100% !important;
+  }
+  .report-paper-page {
+    box-shadow: none !important;
+    border: none !important;
+    padding: 0 0 30px 0 !important;
+    margin: 0 !important;
+    page-break-after: always !important;
+    break-after: page !important;
+  }
+  .print-page-break {
+    page-break-after: always !important;
+    break-after: page !important;
+  }
+  .report-table th {
+    background: #e2e8f0 !important;
+    color: #000000 !important;
+  }
+  .code-block-display, .architecture-diagram-box {
+    background: #f1f5f9 !important;
+    color: #000000 !important;
+    border: 1px solid #cbd5e1 !important;
+  }
+}
+
+
+
 

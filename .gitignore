@@ -2,6 +2,8 @@
 .env.*
 !.env.example
 node_modules/
+dist/
+artifacts/
 cache/
 coverage/
 .DS_Store

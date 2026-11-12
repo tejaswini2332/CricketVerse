@@ -1,6 +1,7 @@
 import React, { useState } from "react";
 import { useCricket } from "../context/CricketContext";
 import { Player } from "../types";
+import { generateSvgAvatar } from "../scoringEngine";
 
 export const CollectionTab: React.FC = () => {
   const { userCollection, setInspectPlayer, listCardForAuction, setCurrentTab } = useCricket();
@@ -83,13 +84,15 @@ export const CollectionTab: React.FC = () => {
             const rarityClass = `rarity-${p.rarity.toLowerCase()}`;
             return (
               <div key={`${p.id}-${idx}`} className="player-card" data-id={p.id}>
-                <div className="card-banner">
+                <div className="card-banner" style={{ height: "165px" }}>
                   <img
                     className="card-img"
                     src={p.avatar}
                     alt={p.name}
                     onError={(e) => {
-                      (e.target as HTMLImageElement).src = `https://api.dicebear.com/7.x/identicon/svg?seed=${encodeURIComponent(p.name)}`;
+                      const target = e.currentTarget;
+                      target.onerror = null;
+                      target.src = generateSvgAvatar(p);
                     }}
                   />
                   <span className={`card-rarity-tag ${rarityClass}`}>{p.rarity}</span>

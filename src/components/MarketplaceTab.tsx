@@ -1,5 +1,6 @@
 import React, { useState } from "react";
 import { useCricket } from "../context/CricketContext";
+import { generateSvgAvatar } from "../scoringEngine";
 
 export const MarketplaceTab: React.FC = () => {
   const {
@@ -144,13 +145,15 @@ export const MarketplaceTab: React.FC = () => {
             const isOwner = walletAddress && item.seller.toLowerCase() === walletAddress.toLowerCase();
             return (
               <div key={item.id} className="auction-item-card" style={{ background: "white", borderRadius: "16px", border: "1px solid var(--card-border)", overflow: "hidden", boxShadow: "var(--shadow-card)" }}>
-                <div className="card-banner" style={{ height: "190px" }}>
+                <div className="card-banner" style={{ height: "165px" }}>
                   <img
                     className="card-img"
                     src={item.player.avatar}
                     alt={item.player.name}
                     onError={(e) => {
-                      (e.target as HTMLImageElement).src = `https://api.dicebear.com/7.x/identicon/svg?seed=${encodeURIComponent(item.player.name)}`;
+                      const target = e.currentTarget;
+                      target.onerror = null;
+                      target.src = generateSvgAvatar(item.player);
                     }}
                   />
                   <span className={`card-rarity-tag rarity-${item.player.rarity.toLowerCase()}`}>

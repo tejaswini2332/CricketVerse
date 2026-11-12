@@ -1,7 +1,7 @@
 import React, { createContext, useContext, useState, useEffect, ReactNode } from "react";
 import { Player, AuctionItem, Ticket, Poll, Tournament, ToastMessage, PlayerRarity, PendingTx, LiveMatch, PlayerRole } from "../types";
 import { INITIAL_PLAYERS, INITIAL_TICKETS, INITIAL_POLLS, INITIAL_TOURNAMENTS } from "../seedData";
-import { calculatePlayerPoints, validateSquad, generateSvgAvatar } from "../scoringEngine";
+import { calculatePlayerPoints, validateSquad, generateSvgAvatar, getPlayerAvatar } from "../scoringEngine";
 import confetti from "canvas-confetti";
 import { BrowserProvider, JsonRpcProvider, Contract, formatEther, parseEther, isAddress } from "ethers";
 
@@ -134,6 +134,7 @@ interface CricketContextType {
   buyTicket: (ticket: Ticket) => boolean;
   issueTicket: (ticket: Omit<Ticket, "id" | "owner" | "maxResalePrice" | "status">) => void;
   verifyTicketEntry: (payload: string) => { valid: boolean; message: string };
+  resetTicketScans: () => void;
   gatekeeperLogs: { id: string; time: string; text: string; type: "success" | "error" | "info" }[];
 
   // Fan Polls
@@ -381,7 +382,7 @@ export const CricketProvider: React.FC<{ children: ReactNode }> = ({ children })
   const [activeFilter, setActiveFilter] = useState<string>("all");
   const [searchQuery, setSearchQuery] = useState<string>("");
 
-  // Load complete 4,800+ dataset in background
+  // Load complete cricket catalog in background
   useEffect(() => {
     let isMounted = true;
     async function loadDataset() {
@@ -391,8 +392,29 @@ export const CricketProvider: React.FC<{ children: ReactNode }> = ({ children })
         if (res.ok) {
           const data: Player[] = await res.json();
           if (isMounted && Array.isArray(data) && data.length > 0) {
-            // Ensure avatar and stats
+            const localStars: Record<string, string> = {
+              "virat kohli": "/images/players/virat_kohli.jpg",
+              "rohit sharma": "/images/players/rohit_sharma.jpg",
+              "ms dhoni": "/images/players/ms_dhoni.jpg",
+              "jasprit bumrah": "/images/players/jasprit_bumrah.jpg",
+              "hardik pandya": "/images/players/hardik_pandya.jpg",
+              "ravindra jadeja": "/images/players/ravindra_jadeja.jpg",
+              "suryakumar yadav": "/images/players/suryakumar_yadav.jpg",
+              "shubman gill": "/images/players/shubman_gill.jpg",
+              "rishabh pant": "/images/players/rishabh_pant.jpg",
+              "kl rahul": "/images/players/kl_rahul.jpg",
+              "mohammed shami": "/images/players/mohammed_shami.jpg",
+              "kuldeep yadav": "/images/players/kuldeep_yadav.jpg",
+              "axar patel": "/images/players/axar_patel.jpg",
+              "rashid khan": "/images/players/rashid_khan.jpg",
+              "pat cummins": "/images/players/pat_cummins.jpg",
+              "sachin tendulkar": "/images/players/sachin_tendulkar.jpg",
+            };
+
+            // Ensure direct avatar and stats for all players
             const enriched = data.map((p) => {
+              const cleanName = (p.name || "").toLowerCase().trim();
+              const directAvatar = localStars[cleanName] || getPlayerAvatar(p);
               const stats = p.stats || {
                 runs: p.runs % 100,
                 fours: Math.floor((p.runs % 100) / 10),
@@ -403,7 +425,7 @@ export const CricketProvider: React.FC<{ children: ReactNode }> = ({ children })
               const calc = calculatePlayerPoints(stats, p.rarity);
               return {
                 ...p,
-                avatar: p.avatar || generateSvgAvatar(p),
+                avatar: directAvatar,
                 calculatedPoints: calc.finalPoints,
                 basePoints: calc.basePoints,
                 breakdown: calc.breakdown,
@@ -632,7 +654,7 @@ export const CricketProvider: React.FC<{ children: ReactNode }> = ({ children })
   };
 
   // Matchday XI Fantasy (Live Cricket API Integration)
-  const [selectedPlayerIds, setSelectedPlayerIds] = useState<number[]>([1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11]);
+  const [selectedPlayerIds, setSelectedPlayerIds] = useState<number[]>([]);
   const [todayMatches, setTodayMatches] = useState<LiveMatch[]>([
     {
       id: 1543963,
@@ -1238,6 +1260,15 @@ export const CricketProvider: React.FC<{ children: ReactNode }> = ({ children })
     return { valid: true, message: msg };
   };
 
+  const resetTicketScans = () => {
+    setTickets((prev) => prev.map((t) => ({ ...t, used: false })));
+    const timeStr = new Date().toLocaleTimeString();
+    setGatekeeperLogs((prev) => [
+      { id: Math.random().toString(), time: timeStr, text: "All turnstile passes reset to unscanned status for testing.", type: "info" },
+      ...prev,
+    ]);
+  };
+
   // Fan Polls
   const [polls, setPolls] = useState<Poll[]>(INITIAL_POLLS);
 
@@ -1597,6 +1628,7 @@ export const CricketProvider: React.FC<{ children: ReactNode }> = ({ children })
         buyTicket,
         issueTicket,
         verifyTicketEntry,
+        resetTicketScans,
         gatekeeperLogs,
         polls,
         votePoll,

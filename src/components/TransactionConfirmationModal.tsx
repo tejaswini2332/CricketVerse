@@ -87,7 +87,7 @@ export const TransactionConfirmationModal: React.FC = () => {
               alt="Item asset"
               style={{ width: "52px", height: "52px", borderRadius: "10px", objectFit: "cover", background: "white" }}
               onError={(e) => {
-                (e.target as HTMLImageElement).src = `https://api.dicebear.com/7.x/identicon/svg?seed=CricketVerse`;
+                (e.target as HTMLImageElement).src = `data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="64" height="64" viewBox="0 0 64 64"><rect width="64" height="64" rx="10" fill="%230f172a"/><path d="M32 16 L48 24 L48 42 L32 50 L16 42 L16 24 Z" fill="%231e293b" stroke="%2322c55e" stroke-width="2"/><text x="32" y="36" fill="%2322c55e" font-family="sans-serif" font-size="12" font-weight="bold" text-anchor="middle">CRIC</text></svg>`;
               }}
             />
             <div style={{ flex: 1, minWidth: 0 }}>

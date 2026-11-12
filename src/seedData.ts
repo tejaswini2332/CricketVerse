@@ -286,7 +286,7 @@ export const INITIAL_PLAYERS: Player[] = [
     wickets: 4,
     strikeRate: 145.5,
     economy: 0.0,
-    avatar: "https://thumb.wikimedia.org/wikipedia/commons/thumb/3/3e/The_cricket_legend_Sachin_Tendulkar_at_the_Oval_Maidan_in_Mumbai_During_the_Duke_and_Duchess_of_Cambridge_Visit%2826271019082%29.jpg/330px-The_cricket_legend_Sachin_Tendulkar_at_the_Oval_Maidan_in_Mumbai_During_the_Duke_and_Duchess_of_Cambridge_Visit%2826271019082%29.jpg",
+    avatar: "/images/players/sachin_tendulkar.jpg",
     stats: { runs: 94, fours: 11, sixes: 3, wickets: 0, catches: 1 },
   },
 ];

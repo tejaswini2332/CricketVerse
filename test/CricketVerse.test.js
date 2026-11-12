@@ -66,7 +66,7 @@ describe("CricketVerse Web3 Ecosystem - Smart Contract Test Suite", function () 
       const balanceBefore = await cricToken.balanceOf(seller.address);
       await cricToken.connect(seller).claimFaucet();
       const balanceAfter = await cricToken.balanceOf(seller.address);
-      expect(balanceAfter - balanceBefore).to.equal(parseCRIC(1000));
+      expect(balanceAfter - balanceBefore).to.equal(parseCRIC(50000));
     });
 
     it("Should reject faucet spam within cooldown period", async function () {

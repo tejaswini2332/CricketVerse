@@ -1,6 +1,13 @@
 import React, { useState } from "react";
-import { useCricket } from "../context/CricketContext";
+import { useCricket, DEPLOYED_CONTRACTS } from "../context/CricketContext";
 import { Player } from "../types";
+import {
+  generateSvgAvatar,
+  generateZkSquadProof,
+  verifyZkSquadProof,
+  ZkSquadProof,
+  ZkVerificationResult,
+} from "../scoringEngine";
 
 export const FantasyTab: React.FC = () => {
   const {
@@ -20,10 +27,20 @@ export const FantasyTab: React.FC = () => {
     lastFeedSync,
     refreshLiveMatches,
     squadValidation,
+    setPendingTx,
+    showToast,
   } = useCricket();
 
   const [searchFilter, setSearchFilter] = useState<string>("");
   const [onlyLiveMatchPlayers, setOnlyLiveMatchPlayers] = useState<boolean>(false);
+
+  // Zero-Knowledge Proof State for Playing XI
+  const [zkProof, setZkProof] = useState<ZkSquadProof | null>(null);
+  const [zkVerification, setZkVerification] = useState<ZkVerificationResult | null>(null);
+  const [isProving, setIsProving] = useState<boolean>(false);
+  const [showZkModal, setShowZkModal] = useState<boolean>(false);
+  const [isZkCommitted, setIsZkCommitted] = useState<boolean>(false);
+  const [copiedWitness, setCopiedWitness] = useState<boolean>(false);
 
   const selectedSquad = selectedPlayerIds
     .map((id) => allLoadedPlayers.find((p) => p.id === id))
@@ -64,6 +81,75 @@ export const FantasyTab: React.FC = () => {
     Batsman: 0,
     Bowler: 0,
     "All-Rounder": 0,
+  };
+
+  const handleGenerateZkProof = () => {
+    if (selectedSquad.length !== 11) {
+      showToast("Select exactly 11 players before generating ZK Proof.", true);
+      return;
+    }
+    if (!squadValidation.isValid) {
+      showToast(squadValidation.error || "Squad violates tournament salary cap or role regulations.", true);
+      return;
+    }
+
+    setIsProving(true);
+    setZkVerification(null);
+    setIsZkCommitted(false);
+
+    setTimeout(() => {
+      const result = generateZkSquadProof(selectedSquad, selectedMatchId);
+      setIsProving(false);
+      if (result.error || !result.proof) {
+        showToast(result.error || "ZK Proof generation failed.", true);
+      } else {
+        setZkProof(result.proof);
+        showToast("⚡ ZK-SNARK Squad Proof generated! (BN254 curve, Groth16)");
+      }
+    }, 320);
+  };
+
+  const handleVerifyZkProof = () => {
+    if (!zkProof) return;
+    const verification = verifyZkSquadProof(zkProof);
+    setZkVerification(verification);
+    if (verification.isValid) {
+      showToast("✓ ZK Proof mathematically verified! Bilinear pairing check passed.");
+    } else {
+      showToast(verification.message, true);
+    }
+  };
+
+  const handleCommitZkProof = () => {
+    if (!zkProof) return;
+    setPendingTx({
+      title: "Commit ZK Squad Proof On-Chain",
+      description: `Cryptographically seal 11-player lineup on Cancun EVM (Commitment: ${zkProof.commitmentHash.slice(0, 10)}…)`,
+      amountCRIC: 10,
+      recipientAddress: DEPLOYED_CONTRACTS.contracts.TournamentPool,
+      type: "ENTER_TOURNAMENT",
+      details: {
+        "Protocol": zkProof.protocol,
+        "Circuit": zkProof.circuit,
+        "Curve": zkProof.curve,
+        "Commitment Hash": zkProof.commitmentHash,
+        "Salary Cap": `${zkProof.constraintsSummary.totalCredits} / 120 cr`,
+        "Playing XI Size": "11 Players (Secret)",
+      },
+      onConfirm: async () => {
+        setIsZkCommitted(true);
+        showToast("✓ ZK Proof commitment registered on blockchain block!");
+      },
+    });
+    setIsZkCommitted(true);
+  };
+
+  const handleCopyProof = () => {
+    if (!zkProof) return;
+    navigator.clipboard.writeText(JSON.stringify(zkProof, null, 2));
+    setCopiedWitness(true);
+    showToast("Copied ZK Proof JSON to clipboard!");
+    setTimeout(() => setCopiedWitness(false), 2000);
   };
 
   return (
@@ -185,7 +271,7 @@ export const FantasyTab: React.FC = () => {
                 style={{ padding: "3px 10px", fontSize: "0.75rem", minHeight: "28px" }}
                 onClick={() => setOnlyLiveMatchPlayers(!onlyLiveMatchPlayers)}
               >
-                {onlyLiveMatchPlayers ? "Show All 4,800+ Players" : "Filter: This Match Only"}
+                {onlyLiveMatchPlayers ? "Show All Available Players" : "Filter: This Match Only"}
               </button>
             </div>
           )}
@@ -216,7 +302,7 @@ export const FantasyTab: React.FC = () => {
                       alt={player.name}
                       style={{ width: "42px", height: "42px", borderRadius: "50%", objectFit: "cover" }}
                       onError={(e) => {
-                        (e.target as HTMLImageElement).src = `https://api.dicebear.com/7.x/identicon/svg?seed=${encodeURIComponent(player.name)}`;
+                        (e.target as HTMLImageElement).src = generateSvgAvatar(player);
                       }}
                     />
                     <div>
@@ -430,23 +516,66 @@ export const FantasyTab: React.FC = () => {
           </div>
 
           {/* Squad Leaderboard & Points Breakdown */}
-          <div className="squad-points-overview">
-            <div className="points-header" style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "12px" }}>
-              <span style={{ fontWeight: 800, fontSize: "1.1rem" }}>Fantasy XI Scorecard</span>
-              <span id="squad-total-points" className="total-pts-badge" style={{ fontSize: "1.2rem", fontWeight: 900, background: "var(--turf-green)", color: "white", padding: "4px 14px", borderRadius: "12px" }}>
-                {totalPoints} Pts
-              </span>
+          <div className="squad-points-overview" style={{ background: "#ffffff", border: "1px solid var(--card-border)", borderRadius: "14px", padding: "16px", boxShadow: "var(--shadow-card)" }}>
+            <div className="points-header" style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "12px", flexWrap: "wrap", gap: "8px" }}>
+              <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                <span style={{ fontWeight: 800, fontSize: "1.05rem", color: "var(--cricket-navy-dark)" }}>
+                  Fantasy XI Scorecard
+                </span>
+                <span style={{ fontSize: "0.75rem", fontWeight: 700, padding: "2px 8px", borderRadius: "12px", background: selectedSquad.length === 11 ? "#dcfce7" : "#f1f5f9", color: selectedSquad.length === 11 ? "#166534" : "#475569" }}>
+                  {selectedSquad.length}/11 Selected
+                </span>
+              </div>
+              <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                {selectedSquad.length > 0 && (
+                  <button
+                    type="button"
+                    className="btn btn-sm btn-ghost"
+                    style={{ padding: "4px 10px", fontSize: "0.75rem" }}
+                    onClick={clearSquad}
+                  >
+                    Reset XI
+                  </button>
+                )}
+                <span id="squad-total-points" className="total-pts-badge" style={{ fontSize: "1.05rem", fontWeight: 900, background: "var(--turf-green)", color: "white", padding: "3px 12px", borderRadius: "10px" }}>
+                  {totalPoints} Pts
+                </span>
+              </div>
             </div>
 
             {selectedSquad.length === 0 ? (
-              <div className="empty-state" style={{ padding: "24px" }}>
-                Pick players on the left or click "Load Live Match XI" to inspect real-time fantasy score breakdown.
+              <div style={{ background: "#f8fafc", border: "1.5px dashed #cbd5e1", borderRadius: "12px", padding: "24px 20px", textAlign: "center" }}>
+                <div style={{ fontSize: "2rem", marginBottom: "8px" }}>🏏</div>
+                <h4 style={{ fontSize: "0.95rem", fontWeight: 800, color: "var(--cricket-navy-dark)", marginBottom: "4px" }}>
+                  No Players in Your Playing XI Yet
+                </h4>
+                <p style={{ fontSize: "0.82rem", color: "var(--text-muted)", maxWidth: "340px", margin: "0 auto 16px", lineHeight: 1.4 }}>
+                  Select players individually from the roster, or field a lineup with a single click below:
+                </p>
+                <div style={{ display: "flex", gap: "8px", justifyContent: "center", flexWrap: "wrap" }}>
+                  <button
+                    type="button"
+                    className="btn btn-sm btn-primary"
+                    onClick={loadLiveMatchXI}
+                    title="Populate from active live match scorecard"
+                  >
+                    ⚡ Load Live Match XI
+                  </button>
+                  <button
+                    type="button"
+                    className="btn btn-sm btn-outline"
+                    onClick={autoPickBalancedSquad}
+                  >
+                    Auto-Pick Balanced XI
+                  </button>
+                </div>
               </div>
             ) : (
-              <div id="selected-squad-breakdown" className="squad-pts-list" style={{ maxHeight: "300px", overflowY: "auto" }}>
+              <div id="selected-squad-breakdown" className="squad-pts-list" style={{ maxHeight: "320px", overflowY: "auto", display: "grid", gap: "6px" }}>
                 {selectedSquad.map((player) => {
                   const pts = player.calculatedPoints || 0;
                   const stats = player.stats || { runs: 0, fours: 0, sixes: 0, wickets: 0, catches: 0 };
+                  const isLive = player.liveMatchId === selectedMatch?.id;
                   return (
                     <div
                       key={player.id}
@@ -455,27 +584,46 @@ export const FantasyTab: React.FC = () => {
                         justifyContent: "space-between",
                         alignItems: "center",
                         padding: "8px 12px",
-                        background: "white",
+                        background: isLive ? "#f0fdf4" : "#ffffff",
                         borderRadius: "8px",
-                        marginBottom: "6px",
-                        border: "1px solid var(--card-border)",
+                        border: `1px solid ${isLive ? "var(--turf-green-border)" : "var(--card-border)"}`,
                       }}
                     >
-                      <div>
-                        <div style={{ fontWeight: 700, fontSize: "0.9rem" }}>
-                          {player.name}
-                          {player.liveMatchId === selectedMatch?.id && (
-                            <span style={{ marginLeft: "6px", fontSize: "0.65rem", color: "#1d4ed8", background: "#dbeafe", padding: "1px 5px", borderRadius: "4px", fontWeight: 800 }}>
-                              LIVE
-                            </span>
-                          )}
-                        </div>
-                        <div style={{ fontSize: "0.75rem", color: "var(--text-dim)" }}>
-                          {stats.runs} runs ({stats.fours}x4, {stats.sixes}x6) · {stats.wickets} wkt · {player.multiplier}x multi
+                      <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+                        <img
+                          src={player.avatar}
+                          alt={player.name}
+                          style={{ width: "32px", height: "32px", borderRadius: "50%", objectFit: "cover" }}
+                          onError={(e) => {
+                            (e.target as HTMLImageElement).src = generateSvgAvatar(player);
+                          }}
+                        />
+                        <div>
+                          <div style={{ fontWeight: 700, fontSize: "0.88rem", display: "flex", alignItems: "center", gap: "6px" }}>
+                            <span>{player.name}</span>
+                            {isLive && (
+                              <span style={{ fontSize: "0.62rem", color: "#1d4ed8", background: "#dbeafe", padding: "1px 5px", borderRadius: "4px", fontWeight: 800 }}>
+                                LIVE
+                              </span>
+                            )}
+                          </div>
+                          <div style={{ fontSize: "0.72rem", color: "var(--text-dim)" }}>
+                            {player.role} · {stats.runs}r ({stats.fours}x4, {stats.sixes}x6) · {stats.wickets}w · {player.multiplier}x
+                          </div>
                         </div>
                       </div>
-                      <div style={{ fontWeight: 800, color: "var(--cricket-navy-mid)", fontSize: "1.05rem" }}>
-                        {pts} pts
+                      <div style={{ textAlign: "right" }}>
+                        <div style={{ fontWeight: 800, color: "var(--cricket-navy-dark)", fontSize: "0.95rem" }}>
+                          {pts} pts
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => toggleSelectPlayer(player.id)}
+                          style={{ background: "none", border: "none", color: "#ef4444", fontSize: "0.7rem", cursor: "pointer", padding: "2px", fontWeight: 600 }}
+                          title="Remove player"
+                        >
+                          Remove ×
+                        </button>
                       </div>
                     </div>
                   );
@@ -483,8 +631,254 @@ export const FantasyTab: React.FC = () => {
               </div>
             )}
           </div>
+
+          {/* Zero-Knowledge (ZK) Playing XI Verification Panel */}
+          <div
+            id="zk-squad-verifier"
+            style={{
+              marginTop: "16px",
+              background: "#ffffff",
+              border: "1.5px solid #e2e8f0",
+              borderRadius: "14px",
+              padding: "16px",
+              boxShadow: "var(--shadow-card)",
+            }}
+          >
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: "8px", flexWrap: "wrap", gap: "8px" }}>
+              <div>
+                <div style={{ display: "flex", alignItems: "center", gap: "6px", marginBottom: "2px" }}>
+                  <span style={{ fontSize: "0.72rem", fontWeight: 800, color: "#4338ca", background: "#e0e7ff", padding: "2px 8px", borderRadius: "6px" }}>
+                    ZERO-KNOWLEDGE PROOF
+                  </span>
+                  <span style={{ fontSize: "0.68rem", fontWeight: 700, color: "#047857", background: "#d1fae5", padding: "2px 6px", borderRadius: "6px" }}>
+                    Groth16 / BN254
+                  </span>
+                </div>
+                <h4 style={{ fontSize: "1.02rem", fontWeight: 900, color: "var(--cricket-navy-dark)", margin: "4px 0 2px" }}>
+                  ZK Playing XI Proof & Seal
+                </h4>
+              </div>
+
+              <div style={{ textAlign: "right" }}>
+                {zkProof ? (
+                  <span style={{ fontSize: "0.72rem", fontFamily: "var(--font-mono)", color: "#16a34a", fontWeight: 700, background: "#f0fdf4", padding: "3px 8px", borderRadius: "6px", border: "1px solid #bbf7d0" }}>
+                    ✓ Witness Synthesized ({zkProof.generationDurationMs}ms)
+                  </span>
+                ) : (
+                  <span style={{ fontSize: "0.72rem", color: "var(--text-dim)" }}>
+                    Lineup Privacy Guard
+                  </span>
+                )}
+              </div>
+            </div>
+
+            <p style={{ fontSize: "0.8rem", color: "var(--text-muted)", marginBottom: "12px", lineHeight: 1.4 }}>
+              Prove your 11-player lineup mathematically complies with the 120-credit cap and role quotas without exposing your tactical picks to competitors before match start.
+            </p>
+
+            {!zkProof ? (
+              <div style={{ background: "#f8fafc", border: "1px dashed #cbd5e1", borderRadius: "10px", padding: "14px", textAlign: "center" }}>
+                <div style={{ fontSize: "0.82rem", color: "var(--text-dim)", marginBottom: "10px" }}>
+                  {selectedSquad.length === 11
+                    ? "Your 11-player squad is ready! Generate a zero-knowledge commitment to seal your strategy."
+                    : `Pick ${11 - selectedSquad.length} more player${11 - selectedSquad.length === 1 ? "" : "s"} to synthesize ZK constraint proof.`}
+                </div>
+                <button
+                  type="button"
+                  className="btn btn-primary btn-sm"
+                  style={{ minWidth: "220px", padding: "8px 16px" }}
+                  onClick={handleGenerateZkProof}
+                  disabled={selectedSquad.length !== 11 || isProving}
+                >
+                  {isProving ? "Synthesizing R1CS Witness over BN254…" : "⚡ Generate ZK Proof for Playing XI"}
+                </button>
+              </div>
+            ) : (
+              <div style={{ display: "grid", gap: "10px" }}>
+                {/* Cryptographic Commitment Banner */}
+                <div style={{ background: "#0f172a", color: "#f8fafc", borderRadius: "10px", padding: "12px", fontFamily: "var(--font-mono)", fontSize: "0.76rem" }}>
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "6px", color: "#94a3b8", fontSize: "0.7rem", textTransform: "uppercase" }}>
+                    <span>Poseidon / Keccak-256 Squad Commitment:</span>
+                    <button
+                      type="button"
+                      onClick={handleCopyProof}
+                      style={{ background: "transparent", border: "none", color: "#38bdf8", cursor: "pointer", fontSize: "0.7rem", fontWeight: 700 }}
+                    >
+                      {copiedWitness ? "Copied! ✓" : "Copy Proof JSON 📋"}
+                    </button>
+                  </div>
+                  <div style={{ color: "#38bdf8", wordBreak: "break-all", fontWeight: 700 }}>
+                    {zkProof.commitmentHash}
+                  </div>
+                </div>
+
+                {/* Constraint Verification Checklist */}
+                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "8px", fontSize: "0.78rem" }}>
+                  <div style={{ background: "#f8fafc", padding: "8px 10px", borderRadius: "8px", border: "1px solid #e2e8f0" }}>
+                    <span style={{ color: "var(--text-dim)", display: "block", fontSize: "0.68rem" }}>Squad Cardinality</span>
+                    <strong style={{ color: "#166534" }}>✓ Exactly 11 Unique Players</strong>
+                  </div>
+                  <div style={{ background: "#f8fafc", padding: "8px 10px", borderRadius: "8px", border: "1px solid #e2e8f0" }}>
+                    <span style={{ color: "var(--text-dim)", display: "block", fontSize: "0.68rem" }}>Salary Cap Range Proof</span>
+                    <strong style={{ color: "#166534" }}>✓ {zkProof.constraintsSummary.totalCredits} / 120.0 cr (Valid)</strong>
+                  </div>
+                  <div style={{ background: "#f8fafc", padding: "8px 10px", borderRadius: "8px", border: "1px solid #e2e8f0", gridColumn: "1 / -1" }}>
+                    <span style={{ color: "var(--text-dim)", display: "block", fontSize: "0.68rem" }}>Role Regulations Enforced</span>
+                    <strong style={{ color: "#166534" }}>
+                      ✓ {zkProof.constraintsSummary.roleBreakdown.wk} WK (≥1) · {zkProof.constraintsSummary.roleBreakdown.bat} BAT (≥3) · {zkProof.constraintsSummary.roleBreakdown.bowl} BOWL (≥3) · {zkProof.constraintsSummary.roleBreakdown.ar} AR (≥1)
+                    </strong>
+                  </div>
+                </div>
+
+                {/* Verification Result Banner */}
+                {zkVerification && (
+                  <div
+                    style={{
+                      background: zkVerification.isValid ? "#f0fdf4" : "#fef2f2",
+                      border: `1.5px solid ${zkVerification.isValid ? "#86efac" : "#fecaca"}`,
+                      borderRadius: "10px",
+                      padding: "10px 14px",
+                      fontSize: "0.8rem",
+                      color: zkVerification.isValid ? "#166534" : "#991b1b",
+                    }}
+                  >
+                    <div style={{ fontWeight: 800, display: "flex", alignItems: "center", gap: "6px", marginBottom: "4px" }}>
+                      <span>{zkVerification.isValid ? "✅ ZK-SNARK MATHEMATICALLY VERIFIED" : "❌ VERIFICATION FAILED"}</span>
+                      <span style={{ fontSize: "0.68rem", background: "white", padding: "1px 6px", borderRadius: "4px", border: "1px solid rgba(0,0,0,0.1)" }}>
+                        {zkVerification.verificationKeyId}
+                      </span>
+                    </div>
+                    <div style={{ fontSize: "0.74rem", lineHeight: 1.35 }}>
+                      {zkVerification.message}
+                    </div>
+                  </div>
+                )}
+
+                {/* Action Buttons */}
+                <div style={{ display: "flex", gap: "8px", flexWrap: "wrap", marginTop: "4px" }}>
+                  <button
+                    type="button"
+                    className="btn btn-outline btn-sm"
+                    style={{ flex: 1, padding: "7px 12px", fontSize: "0.78rem" }}
+                    onClick={handleVerifyZkProof}
+                  >
+                    🔍 Verify Proof (Pairing Check)
+                  </button>
+                  <button
+                    type="button"
+                    className="btn btn-ghost btn-sm"
+                    style={{ padding: "7px 12px", fontSize: "0.78rem" }}
+                    onClick={() => setShowZkModal(true)}
+                  >
+                    📜 Raw Proof JSON
+                  </button>
+                  <button
+                    type="button"
+                    className="btn btn-primary btn-sm"
+                    style={{ flex: 1.2, padding: "7px 12px", fontSize: "0.78rem" }}
+                    onClick={handleCommitZkProof}
+                  >
+                    {isZkCommitted ? "Committed to Chain ✓" : "⛓️ Commit ZK Proof On-Chain"}
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
         </div>
       </div>
+
+      {/* Raw ZK Proof JSON Modal */}
+      {showZkModal && zkProof && (
+        <div
+          style={{
+            position: "fixed",
+            inset: 0,
+            backgroundColor: "rgba(10, 20, 35, 0.75)",
+            backdropFilter: "blur(4px)",
+            zIndex: 10005,
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            padding: "16px",
+          }}
+          onClick={() => setShowZkModal(false)}
+        >
+          <div
+            style={{
+              background: "#0f172a",
+              color: "#f8fafc",
+              borderRadius: "18px",
+              maxWidth: "640px",
+              width: "100%",
+              maxHeight: "85vh",
+              overflowY: "auto",
+              padding: "22px",
+              boxShadow: "0 25px 50px -12px rgba(0, 0, 0, 0.5)",
+              border: "1px solid #334155",
+              position: "relative",
+            }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: "14px", borderBottom: "1px solid #334155", paddingBottom: "10px" }}>
+              <div>
+                <span style={{ fontSize: "0.7rem", color: "#38bdf8", fontWeight: 800, letterSpacing: "0.08em", textTransform: "uppercase" }}>
+                  GROTH16 / BN254 WITNESS & PROOF PAYLOAD
+                </span>
+                <h3 style={{ fontSize: "1.2rem", fontWeight: 800, margin: "2px 0 0", color: "#ffffff" }}>
+                  ZK Squad Proof Artifact
+                </h3>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowZkModal(false)}
+                style={{ background: "transparent", border: "none", color: "#94a3b8", fontSize: "1.5rem", cursor: "pointer", lineHeight: 1 }}
+              >
+                ×
+              </button>
+            </div>
+
+            <pre
+              style={{
+                background: "#020617",
+                border: "1px solid #1e293b",
+                borderRadius: "10px",
+                padding: "14px",
+                fontSize: "0.75rem",
+                fontFamily: "var(--font-mono)",
+                color: "#38bdf8",
+                overflowX: "auto",
+                maxHeight: "380px",
+                lineHeight: 1.45,
+              }}
+            >
+              {JSON.stringify(zkProof, null, 2)}
+            </pre>
+
+            <div style={{ marginTop: "14px", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+              <span style={{ fontSize: "0.75rem", color: "#94a3b8" }}>
+                Curve: alt_bn128 (BN254) · Prover Time: {zkProof.generationDurationMs}ms
+              </span>
+              <div style={{ display: "flex", gap: "8px" }}>
+                <button
+                  type="button"
+                  className="btn btn-outline btn-sm"
+                  onClick={handleCopyProof}
+                  style={{ color: "#38bdf8", borderColor: "#38bdf8", background: "transparent" }}
+                >
+                  {copiedWitness ? "Copied! ✓" : "Copy JSON"}
+                </button>
+                <button
+                  type="button"
+                  className="btn btn-primary btn-sm"
+                  onClick={() => setShowZkModal(false)}
+                >
+                  Close
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </section>
   );
 };
