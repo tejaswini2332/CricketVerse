@@ -37,13 +37,13 @@ The global sports economy represents an estimated **$12.8 billion market**, span
 ## System Architecture
 
 ```
-+---------------------------------------------------------------------------------------+
++----------------------------------------------------------------------------------------+
 |                               CRICKETVERSE CLIENT LAYER                                |
-|  React 19 SPA | TypeScript | Dark Turf CSS Constitution | PWA Service Worker (sw.js)  |
-|                                                                                       |
+|  React 19 SPA | TypeScript | Dark Turf CSS Constitution | PWA Service Worker (sw.js)   |
+|                                                                                        |
 |  [The Pavilion]    [My Collection]    [Auction Room]    [Matchday XI]   [Stadium Gate] |
 |   Player Roster       NFT Vault        English Escrow    ZK Squad Seal   QR Turnstile  |
-+---------------------------------------------------------------------------------------+
++----------------------------------------------------------------------------------------+
             |                                           |                     |
      JSON-RPC / Web3                             ZK Witness Prover     REST Polling / WS
             v                                           v                     v
