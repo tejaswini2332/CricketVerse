@@ -154,7 +154,7 @@ All 8 smart contracts are deployed locally on the Cancun Hardhat EVM (`31337`) i
 ### 1. Clone Repository & Install Dependencies
 ```bash
 # Clone the repository
-git clone https://github.com/your-username/cricketverse.git
+git clone https://github.com/tejaswini2332/cricketverse.git
 cd cricketverse
 
 # Install dependencies (React, Vite, Hardhat, Ethers, OpenZeppelin)
