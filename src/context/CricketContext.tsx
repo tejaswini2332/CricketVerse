@@ -11,7 +11,17 @@ import {
   verifyZkSquadProof,
 } from "../scoringEngine";
 import confetti from "canvas-confetti";
-import { BrowserProvider, JsonRpcProvider, Contract, formatEther, parseEther, isAddress } from "ethers";
+import { BrowserProvider, JsonRpcProvider, Contract, Wallet, formatEther, parseEther, isAddress, getBytes } from "ethers";
+
+export interface SignedTicketPass {
+  tokenId: number;
+  payload: string;
+  deadline: number;
+  nonce: number;
+  challengeHash: string;
+  signature: string;
+  signerAddress: string;
+}
 
 export const DEPLOYED_CONTRACTS = {
   network: "localhost",
@@ -142,9 +152,10 @@ interface CricketContextType {
   ticketFilter: "all" | "LIVE" | "UPCOMING" | "PAST";
   setTicketFilter: (filter: "all" | "LIVE" | "UPCOMING" | "PAST") => void;
   buyTicket: (ticket: Ticket) => boolean;
-  issueTicket: (ticket: Omit<Ticket, "id" | "owner" | "maxResalePrice" | "status">) => void;
-  verifyTicketEntry: (payload: string) => { valid: boolean; message: string };
-  resetTicketScans: () => void;
+  issueTicket: (ticket: Omit<Ticket, "id" | "owner" | "maxResalePrice" | "status">) => Promise<void>;
+  signTicketEntryPass: (tokenId: number, ttlSeconds?: number) => Promise<SignedTicketPass | null>;
+  verifyTicketEntry: (payload: string) => Promise<{ valid: boolean; message: string }>;
+  syncOnChainTickets: () => Promise<void>;
   gatekeeperLogs: { id: string; time: string; text: string; type: "success" | "error" | "info" }[];
 
   // Fan Polls
@@ -1249,16 +1260,108 @@ export const CricketProvider: React.FC<{ children: ReactNode }> = ({ children })
     showToast(`Simulated over: ${overRuns} runs, ${overWickets} wickets! Points updated.`);
   };
 
-  // Stadium Passes
+  // Stadium Passes (Synced On-Chain with MatchTicketNFT)
   const [tickets, setTickets] = useState<Ticket[]>(INITIAL_TICKETS);
   const [ticketFilter, setTicketFilter] = useState<"all" | "LIVE" | "UPCOMING" | "PAST">("all");
   const [gatekeeperLogs, setGatekeeperLogs] = useState<{ id: string; time: string; text: string; type: "success" | "error" | "info" }[]>([
-    { id: "log-1", time: "19:00:00", text: "Turnstile Gate 4 Scanner initialized and ready.", type: "info" },
+    { id: "log-1", time: "19:00:00", text: "Turnstile Gate 4 initialized · Enforcing EIP-191 holder signature + rotating nonce.", type: "info" },
   ]);
+
+  const [sessionGateWallet] = useState(() => Wallet.createRandom());
+  const MATCH_TICKET_ABI = [
+    "function tickets(uint256) view returns (uint256 matchId, string matchName, string venue, string stand, string seatNumber, uint256 faceValue, uint256 maxResalePrice, bool isRedeemed, uint256 redeemedAt, address redeemedByGatekeeper, bool exists)",
+    "function matchWindows(uint256) view returns (uint64 startsAt, uint64 endsAt)",
+    "function ownerOf(uint256) view returns (address)",
+    "function ticketNonces(uint256) view returns (uint256)",
+    "function authorizedGateSigner(uint256) view returns (address)",
+    "function setGateSigner(uint256 tokenId, address gateSigner)",
+    "function getEntryChallengeHash(uint256 tokenId, uint256 deadline) view returns (bytes32)",
+    "function verifyEntryPass(uint256 tokenId, uint256 deadline, bytes signature) view returns (bool valid, string reason, address holder)",
+    "function issueScheduledTicket(address recipient, uint256 tokenId, uint256 matchId, string matchName, string venue, string stand, string seatNumber, uint256 faceValue, uint64 startsAt, uint64 endsAt)",
+    "function transferFrom(address from, address to, uint256 tokenId)",
+    "function GATEKEEPER_ROLE() view returns (bytes32)",
+    "function hasRole(bytes32 role, address account) view returns (bool)",
+    "function redeemTicketWithSignature(uint256 tokenId, uint256 deadline, bytes signature)",
+  ];
+
+  const syncOnChainTickets = async () => {
+    try {
+      const rpc = new JsonRpcProvider(`${window.location.origin}/rpc`);
+      const ticketContract = new Contract(DEPLOYED_CONTRACTS.contracts.MatchTicketNFT, MATCH_TICKET_ABI, rpc);
+      const latestBlock = await rpc.getBlock("latest");
+      const chainNow = Number(latestBlock?.timestamp || Math.floor(Date.now() / 1000));
+
+      const candidateIds = Array.from(new Set([...tickets.map((t) => t.tokenId), 101, 102, 103, 104, 105, 106, 107, 108, 109, 110]));
+      const synced: Ticket[] = [];
+
+      for (const tokenId of candidateIds) {
+        try {
+          const details = await ticketContract.tickets(tokenId);
+          if (!details?.exists) continue;
+
+          const [win, currentOwner, nonceVal] = await Promise.all([
+            ticketContract.matchWindows(tokenId),
+            ticketContract.ownerOf(tokenId),
+            ticketContract.ticketNonces(tokenId),
+          ]);
+
+          const startsAt = Number(win.startsAt || 0);
+          const endsAt = Number(win.endsAt || 0);
+          let status: "LIVE" | "UPCOMING" | "PAST" = "UPCOMING";
+          if (endsAt > 0 && chainNow >= endsAt) {
+            status = "PAST";
+          } else if (startsAt > 0 && chainNow >= startsAt && (endsAt === 0 || chainNow < endsAt)) {
+            status = "LIVE";
+          }
+
+          synced.push({
+            id: `tkt-${tokenId}`,
+            tokenId,
+            matchId: Number(details.matchId),
+            matchName: String(details.matchName),
+            venue: String(details.venue),
+            stand: String(details.stand),
+            seat: String(details.seatNumber),
+            faceValue: Math.round(Number(formatEther(details.faceValue))),
+            maxResalePrice: Math.round(Number(formatEther(details.maxResalePrice))),
+            startTime: new Date(startsAt * 1000).toISOString(),
+            endTime: new Date(endsAt * 1000).toISOString(),
+            owner: String(currentOwner),
+            status,
+            used: Boolean(details.isRedeemed),
+            nonce: Number(nonceVal),
+            redeemedAt: Number(details.redeemedAt || 0),
+            redeemedBy: String(details.redeemedByGatekeeper || ""),
+          });
+        } catch {
+          // Ignore unissued candidate IDs
+        }
+      }
+
+      if (synced.length > 0) {
+        synced.sort((a, b) => a.tokenId - b.tokenId);
+        setTickets(synced);
+      }
+    } catch {
+      // Hardhat node still initializing
+    }
+  };
+
+  useEffect(() => {
+    syncOnChainTickets();
+  }, []);
 
   const buyTicket = (ticket: Ticket): boolean => {
     if (!isConnected) {
       showToast("Connect your wallet to purchase stadium passes.", true);
+      return false;
+    }
+    if (ticket.used) {
+      showToast(`Pass #${ticket.tokenId} has already been redeemed and is permanently non-transferable.`, true);
+      return false;
+    }
+    if (ticket.status === "PAST") {
+      showToast(`Pass #${ticket.tokenId} match window has ended and cannot be transferred.`, true);
       return false;
     }
     if (cricBalance < ticket.faceValue) {
@@ -1266,12 +1369,15 @@ export const CricketProvider: React.FC<{ children: ReactNode }> = ({ children })
       return false;
     }
 
+    const deployerAddr = "0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266";
+    const sellerAddr = isAddress(ticket.owner) ? ticket.owner : deployerAddr;
+
     setPendingTx({
       type: "BUY_TICKET",
       title: `Stadium Pass #${ticket.tokenId}`,
-      description: `Official ERC-721 Matchday Pass for ${ticket.matchName} at ${ticket.venue}. Anti-scalping resale strictly capped at 15%.`,
+      description: `Atomic ERC-721 purchase for ${ticket.matchName} at ${ticket.venue}. Anti-scalping resale strictly capped at 15% and ticket nonce rotates on transfer.`,
       amountCRIC: ticket.faceValue,
-      recipientAddress: DEPLOYED_CONTRACTS.contracts.MatchTicketNFT,
+      recipientAddress: sellerAddr,
       details: {
         "Match": ticket.matchName,
         "Stand / Seat": `${ticket.stand}, Seat ${ticket.seat}`,
@@ -1280,72 +1386,282 @@ export const CricketProvider: React.FC<{ children: ReactNode }> = ({ children })
         "Smart Contract": "MatchTicketNFT (ERC-721)",
       },
       onConfirm: async () => {
-        await executeOnChainTransfer(ticket.faceValue, DEPLOYED_CONTRACTS.contracts.MatchTicketNFT);
-        setTickets((prev) =>
-          prev.map((t) => (t.id === ticket.id ? { ...t, owner: walletAddress } : t))
-        );
+        const rpc = new JsonRpcProvider(`${window.location.origin}/rpc`);
+        const ticketContract = new Contract(DEPLOYED_CONTRACTS.contracts.MatchTicketNFT, MATCH_TICKET_ABI, rpc);
+        const onChainOwner: string = await ticketContract.ownerOf(ticket.tokenId);
+
+        if (onChainOwner.toLowerCase() === DEPLOYED_CONTRACTS.contracts.CricketMarketplace.toLowerCase()) {
+          // Cancel seeded marketplace escrow listing from seller/owner first or buy via marketplace
+          const marketIface = new Contract(
+            DEPLOYED_CONTRACTS.contracts.CricketMarketplace,
+            ["function buyItem(uint256 listingId, uint256 buyAmount)", "function listings(uint256) view returns (uint256,address,uint8,address,uint256,uint256,uint256,bool)"],
+            rpc
+          );
+          const listing = await marketIface.listings(2);
+          if (listing && listing[7] && Number(listing[4]) === ticket.tokenId) {
+            const listPriceWei = listing[6];
+            const cricIface = new Contract(
+              DEPLOYED_CONTRACTS.contracts.CRIC,
+              ["function approve(address spender, uint256 amount) returns (bool)"],
+              rpc
+            ).interface;
+            await rpc.send("hardhat_impersonateAccount", [walletAddress]);
+            await rpc.send("eth_sendTransaction", [{
+              from: walletAddress,
+              to: DEPLOYED_CONTRACTS.contracts.CRIC,
+              data: cricIface.encodeFunctionData("approve", [DEPLOYED_CONTRACTS.contracts.CricketMarketplace, listPriceWei]),
+            }]);
+            await rpc.send("eth_sendTransaction", [{
+              from: walletAddress,
+              to: DEPLOYED_CONTRACTS.contracts.CricketMarketplace,
+              data: marketIface.interface.encodeFunctionData("buyItem", [2, 1]),
+            }]);
+            await rpc.send("hardhat_stopImpersonatingAccount", [walletAddress]);
+          } else {
+            throw new Error("Ticket is currently locked in another marketplace escrow.");
+          }
+        } else {
+          await executeOnChainTransfer(ticket.faceValue, onChainOwner);
+          if (onChainOwner.toLowerCase() !== walletAddress.toLowerCase()) {
+            await rpc.send("hardhat_impersonateAccount", [onChainOwner]);
+            const xferData = ticketContract.interface.encodeFunctionData("transferFrom", [onChainOwner, walletAddress, ticket.tokenId]);
+            await rpc.send("eth_sendTransaction", [{
+              from: onChainOwner,
+              to: DEPLOYED_CONTRACTS.contracts.MatchTicketNFT,
+              data: xferData,
+            }]);
+            await rpc.send("hardhat_stopImpersonatingAccount", [onChainOwner]);
+          }
+        }
+
+        await syncOnChainBalances();
+        await syncOnChainTickets();
         confetti({ particleCount: 40, spread: 60 });
-        showToast(`Purchased stadium pass #${ticket.tokenId} for ${ticket.faceValue} CRIC!`);
+        showToast(`Purchased ERC-721 Pass #${ticket.tokenId} on-chain! Transfer rotated entry nonce.`);
       },
     });
 
     return true;
   };
 
-  const issueTicket = (data: Omit<Ticket, "id" | "owner" | "maxResalePrice" | "status">) => {
-    const maxResale = Math.round(data.faceValue * 1.15); // Strict 15% anti-scalping max resale cap
-    const newTicket: Ticket = {
-      ...data,
-      id: `tkt-${Date.now()}`,
-      maxResalePrice: maxResale,
-      owner: walletAddress,
-      status: "UPCOMING",
-    };
-    setTickets((prev) => [newTicket, ...prev]);
-    showToast(`Issued on-chain Stadium Pass #${data.tokenId} with fair resale cap of ${maxResale} CRIC!`);
+  const issueTicket = async (data: Omit<Ticket, "id" | "owner" | "maxResalePrice" | "status">) => {
+    const organizerAddr = "0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266";
+    const recipientAddr = isAddress(walletAddress) ? walletAddress : organizerAddr;
+    const maxResale = Math.round(data.faceValue * 1.15);
+
+    try {
+      const rpc = new JsonRpcProvider(`${window.location.origin}/rpc`);
+      const latestBlock = await rpc.getBlock("latest");
+      const chainNow = Number(latestBlock?.timestamp || Math.floor(Date.now() / 1000));
+      const startsAt = Math.max(1, Math.floor(new Date(data.startTime).getTime() / 1000) || chainNow - 60);
+      const endsAt = Math.max(startsAt + 3600, Math.floor(new Date(data.endTime).getTime() / 1000) || chainNow + 14400);
+
+      const ticketContract = new Contract(DEPLOYED_CONTRACTS.contracts.MatchTicketNFT, MATCH_TICKET_ABI, rpc);
+      const callData = ticketContract.interface.encodeFunctionData("issueScheduledTicket", [
+        recipientAddr,
+        data.tokenId,
+        data.matchId,
+        data.matchName,
+        data.venue,
+        data.stand,
+        data.seat,
+        parseEther(data.faceValue.toString()),
+        startsAt,
+        endsAt,
+      ]);
+
+      await rpc.send("hardhat_impersonateAccount", [organizerAddr]);
+      await rpc.send("eth_sendTransaction", [{
+        from: organizerAddr,
+        to: DEPLOYED_CONTRACTS.contracts.MatchTicketNFT,
+        data: callData,
+      }]);
+      await rpc.send("hardhat_stopImpersonatingAccount", [organizerAddr]);
+      await syncOnChainTickets();
+      showToast(`Issued on-chain ERC-721 Pass #${data.tokenId} (Max Resale: ${maxResale} CRIC)!`);
+    } catch (err: unknown) {
+      const msg = (err as { message?: string })?.message || "Failed to issue ticket on-chain.";
+      showToast(msg, true);
+    }
   };
 
-  const verifyTicketEntry = (payload: string): { valid: boolean; message: string } => {
-    const clean = payload.trim().toUpperCase();
+  const signTicketEntryPass = async (tokenId: number, ttlSeconds: number = 120): Promise<SignedTicketPass | null> => {
+    if (!isConnected || !walletAddress) {
+      showToast("Connect your wallet to sign an entry pass.", true);
+      return null;
+    }
+
+    try {
+      const rpc = new JsonRpcProvider(`${window.location.origin}/rpc`);
+      const ticketContract = new Contract(DEPLOYED_CONTRACTS.contracts.MatchTicketNFT, MATCH_TICKET_ABI, rpc);
+      const [onChainOwner, nonceVal, latestBlock] = await Promise.all([
+        ticketContract.ownerOf(tokenId),
+        ticketContract.ticketNonces(tokenId),
+        rpc.getBlock("latest"),
+      ]);
+
+      if (onChainOwner.toLowerCase() !== walletAddress.toLowerCase()) {
+        showToast(`Only current ERC-721 owner (${onChainOwner.slice(0, 8)}…) can sign a gate QR!`, true);
+        return null;
+      }
+
+      const chainNow = Number(latestBlock?.timestamp || Math.floor(Date.now() / 1000));
+      const deadline = chainNow + ttlSeconds;
+      const challengeHash: string = await ticketContract.getEntryChallengeHash(tokenId, deadline);
+
+      let signature = "";
+      const eth = (window as unknown as { ethereum?: unknown }).ethereum;
+      const isInIframe = typeof window !== "undefined" && window.self !== window.top;
+
+      if (eth && isRealWallet && !isInIframe) {
+        try {
+          const provider = new BrowserProvider(eth as never);
+          const signer = await provider.getSigner();
+          const signerAddr = await signer.getAddress();
+          if (signerAddr.toLowerCase() === walletAddress.toLowerCase()) {
+            showToast("Please sign the one-time gate entry challenge in MetaMask…");
+            signature = await signer.signMessage(getBytes(challengeHash));
+          }
+        } catch (err: unknown) {
+          const errorObj = err as { code?: number; message?: string };
+          if (errorObj?.code === 4001 || errorObj?.message?.includes("rejected") || errorObj?.message?.includes("denied")) {
+            throw new Error("Entry signature rejected in MetaMask.");
+          }
+        }
+      }
+
+      if (!signature) {
+        const currentGateSigner: string = await ticketContract.authorizedGateSigner(tokenId);
+        if (currentGateSigner.toLowerCase() !== sessionGateWallet.address.toLowerCase()) {
+          await rpc.send("hardhat_impersonateAccount", [walletAddress]);
+          await rpc.send("eth_sendTransaction", [{
+            from: walletAddress,
+            to: DEPLOYED_CONTRACTS.contracts.MatchTicketNFT,
+            data: ticketContract.interface.encodeFunctionData("setGateSigner", [tokenId, sessionGateWallet.address]),
+          }]);
+          await rpc.send("hardhat_stopImpersonatingAccount", [walletAddress]);
+        }
+        signature = await sessionGateWallet.signMessage(getBytes(challengeHash));
+      }
+
+      const nonce = Number(nonceVal);
+      const payload = `CVPASS1:${tokenId}:${deadline}:${nonce}:${signature}`;
+      showToast(`Signed dynamic QR Pass #${tokenId} (Nonce #${nonce}, valid ${ttlSeconds}s).`);
+
+      return {
+        tokenId,
+        payload,
+        deadline,
+        nonce,
+        challengeHash,
+        signature,
+        signerAddress: walletAddress,
+      };
+    } catch (err: unknown) {
+      const msg = (err as { message?: string })?.message || "Unable to sign gate entry QR.";
+      showToast(msg, true);
+      return null;
+    }
+  };
+
+  const verifyTicketEntry = async (payload: string): Promise<{ valid: boolean; message: string }> => {
+    const clean = payload.trim();
     const timeStr = new Date().toLocaleTimeString();
 
-    // Check if matching exact ticket token ID, CV-PASS-<id>, or internal id
-    const match = tickets.find((t) => {
-      const tokenRegex = new RegExp(`(?:^|[^0-9])${t.tokenId}(?:$|[^0-9])`);
-      return (
-        clean === `CV-PASS-${t.tokenId}` ||
-        clean === t.id.toUpperCase() ||
-        tokenRegex.test(clean)
-      );
-    });
-
-    if (!match) {
-      const msg = `REJECTED: Invalid or counterfeit ticket barcode (${clean}).`;
+    if (!clean.startsWith("CVPASS1:")) {
+      const msg = `REJECTED: Unsigned/static payload (${clean || "EMPTY"})! Holder EIP-191 ECDSA signature & live nonce required.`;
       setGatekeeperLogs((prev) => [{ id: Math.random().toString(), time: timeStr, text: msg, type: "error" }, ...prev]);
       return { valid: false, message: msg };
     }
 
-    if (match.used) {
-      const msg = `REJECTED: Pass #${match.tokenId} was ALREADY SCANNED. Double entry prohibited!`;
+    const parts = clean.split(":");
+    if (parts.length !== 5) {
+      const msg = `REJECTED: Malformed CVPASS1 entry token format.`;
       setGatekeeperLogs((prev) => [{ id: Math.random().toString(), time: timeStr, text: msg, type: "error" }, ...prev]);
       return { valid: false, message: msg };
     }
 
-    // Mark as used
-    setTickets((prev) => prev.map((t) => (t.id === match.id ? { ...t, used: true } : t)));
-    const msg = `ENTRY GRANTED: Pass #${match.tokenId} verified! Stand: ${match.stand}, Seat: ${match.seat}. Welcome!`;
-    setGatekeeperLogs((prev) => [{ id: Math.random().toString(), time: timeStr, text: msg, type: "success" }, ...prev]);
-    confetti({ particleCount: 40, spread: 50, origin: { y: 0.6 } });
-    return { valid: true, message: msg };
-  };
+    const tokenId = Number(parts[1]);
+    const deadline = Number(parts[2]);
+    const signature = parts[4];
 
-  const resetTicketScans = () => {
-    setTickets((prev) => prev.map((t) => ({ ...t, used: false })));
-    const timeStr = new Date().toLocaleTimeString();
-    setGatekeeperLogs((prev) => [
-      { id: Math.random().toString(), time: timeStr, text: "All turnstile passes reset to unscanned status for testing.", type: "info" },
-      ...prev,
-    ]);
+    if (!Number.isFinite(tokenId) || !Number.isFinite(deadline) || !signature.startsWith("0x")) {
+      const msg = `REJECTED: Corrupted tokenId, deadline, or ECDSA signature bytes.`;
+      setGatekeeperLogs((prev) => [{ id: Math.random().toString(), time: timeStr, text: msg, type: "error" }, ...prev]);
+      return { valid: false, message: msg };
+    }
+
+    try {
+      const rpc = new JsonRpcProvider(`${window.location.origin}/rpc`);
+      const ticketContract = new Contract(DEPLOYED_CONTRACTS.contracts.MatchTicketNFT, MATCH_TICKET_ABI, rpc);
+      const [isValid, reason, holder] = await ticketContract.verifyEntryPass(tokenId, deadline, signature);
+
+      if (!isValid) {
+        const msg = `REJECTED (On-Chain): Pass #${tokenId} failed — ${reason}.`;
+        setGatekeeperLogs((prev) => [{ id: Math.random().toString(), time: timeStr, text: msg, type: "error" }, ...prev]);
+        return { valid: false, message: msg };
+      }
+
+      const gatekeeperRole: string = await ticketContract.GATEKEEPER_ROLE();
+      const redeemData = ticketContract.interface.encodeFunctionData("redeemTicketWithSignature", [
+        tokenId,
+        deadline,
+        signature,
+      ]);
+
+      let txHash: string = "";
+      const eth = (window as unknown as { ethereum?: unknown }).ethereum;
+      const isInIframe = typeof window !== "undefined" && window.self !== window.top;
+
+      if (eth && isRealWallet && !isInIframe && walletAddress && await ticketContract.hasRole(gatekeeperRole, walletAddress)) {
+        const provider = new BrowserProvider(eth as never);
+        const signer = await provider.getSigner();
+        const signedContract = new Contract(DEPLOYED_CONTRACTS.contracts.MatchTicketNFT, MATCH_TICKET_ABI, signer);
+        const tx = await signedContract.redeemTicketWithSignature(tokenId, deadline, signature);
+        const receipt = await tx.wait();
+        txHash = receipt?.hash || tx.hash;
+      } else {
+        const candidates = Array.from(
+          new Set([
+            ...(walletAddress && isAddress(walletAddress) ? [walletAddress] : []),
+            "0x3C44CdDdB6a900fa2b585dd299e03d12FA4293BC",
+            "0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266",
+            "0x70997970C51812dc3A010C7d01b50e0d17dc79C8",
+          ])
+        );
+
+        let gatekeeperAddr = "";
+        for (const candidate of candidates) {
+          if (await ticketContract.hasRole(gatekeeperRole, candidate)) {
+            gatekeeperAddr = candidate;
+            break;
+          }
+        }
+
+        if (!gatekeeperAddr) {
+          throw new Error("No authorized GATEKEEPER_ROLE signer is configured on MatchTicketNFT.");
+        }
+
+        await rpc.send("hardhat_impersonateAccount", [gatekeeperAddr]);
+        txHash = await rpc.send("eth_sendTransaction", [{
+          from: gatekeeperAddr,
+          to: DEPLOYED_CONTRACTS.contracts.MatchTicketNFT,
+          data: redeemData,
+        }]);
+        await rpc.send("hardhat_stopImpersonatingAccount", [gatekeeperAddr]);
+      }
+
+      await syncOnChainTickets();
+      const msg = `ENTRY GRANTED (On-Chain Tx ${String(txHash).slice(0, 10)}…): Pass #${tokenId} ECDSA verified for ${String(holder).slice(0, 8)}…! Ticket permanently redeemed & replay-locked.`;
+      setGatekeeperLogs((prev) => [{ id: Math.random().toString(), time: timeStr, text: msg, type: "success" }, ...prev]);
+      confetti({ particleCount: 40, spread: 50, origin: { y: 0.6 } });
+      return { valid: true, message: msg };
+    } catch (err: unknown) {
+      const errMsg = (err as { message?: string })?.message || "Gatekeeper verification reverted on-chain.";
+      const msg = `REJECTED (EVM Revert): ${errMsg}`;
+      setGatekeeperLogs((prev) => [{ id: Math.random().toString(), time: timeStr, text: msg, type: "error" }, ...prev]);
+      return { valid: false, message: msg };
+    }
   };
 
   // Fan Polls
@@ -1737,8 +2053,9 @@ export const CricketProvider: React.FC<{ children: ReactNode }> = ({ children })
         setTicketFilter,
         buyTicket,
         issueTicket,
+        signTicketEntryPass,
         verifyTicketEntry,
-        resetTicketScans,
+        syncOnChainTickets,
         gatekeeperLogs,
         polls,
         votePoll,

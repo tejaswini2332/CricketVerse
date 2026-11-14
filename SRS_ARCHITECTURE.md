@@ -13,8 +13,8 @@ Contemporary sports platforms (fantasy sports, ticketing, fan tokens) operate in
 * **Secondary Market Scalping**: Unchecked scalpers inflate ticket prices up to 500% over face value, while event organizers receive 0% of secondary markup.
 
 **CricketVerse** solves these challenges using a **hybrid Web3 architecture**:
-* **On-Chain Settlement**: Non-custodial ownership (ERC-721, ERC-1155), utility token economics (ERC-20), secondary royalty routing, and programmatic anti-scalping price ceilings.
-* **Off-Chain High-Throughput Processing**: Ball-by-ball sports telemetry, sub-second query caching, and real-time leaderboard indexers.
+* **On-Chain Settlement**: Non-custodial ownership (ERC-721, ERC-1155), utility token economics (ERC-20), secondary royalty routing (`5%`), programmatic anti-scalping price ceilings (`+15%`), and EIP-191 holder-signed turnstile entry.
+* **Client-Side Compute & Local EVM Prototype**: Vite + React TypeScript SPA, Groth16 BN254 ZK squad prover, static JSON athlete dataset (`players_2000_2026.json`) with optional `/espn-api` polling, and local Cancun Hardhat RPC node (`31337`). *(The conceptual diagram below shows the originally proposed Phase-1 production deployment topology.)*
 
 ---
 
@@ -72,7 +72,7 @@ graph TD
 * **Standard**: ERC-20, ERC20Burnable, Ownable.
 * **Max Supply**: $100,000,000\text{ CRIC}$ ($10^{26}\text{ wei}$).
 * **Genesis Mint**: $10,000,000\text{ CRIC}$ allocated to deployer for ecosystem liquidity and drop pools.
-* **Interactive Faucet**: $1{,}000\text{ CRIC}$ per claim, enforced 1-hour cooldown per address (`claimFaucet()`).
+* **Interactive Faucet**: $50{,}000\text{ CRIC}$ per claim (`FAUCET_AMOUNT = 50_000 * 10^18`), enforced 1-hour cooldown per address (`claimFaucet()`).
 * **Minter Role**: Configurable authorized minter address for automated tournament prize distribution.
 
 ### 3.2 Dynamic Player Card NFT (`PlayerCardNFT.sol`)
@@ -100,11 +100,10 @@ graph TD
 * **Standard**: ERC-721, AccessControl (`GATEKEEPER_ROLE`, `ORGANIZER_ROLE`).
 * **Resale Price Ceiling Equation**:
   $$\text{MaxResalePrice} = \frac{\text{FaceValue} \times 11500}{10000} = \text{FaceValue} \times 1.15$$
-  Any secondary marketplace listing or transfer exceeding $\text{MaxResalePrice}$ is rejected by contract logic.
-* **One-Time Redemption Logic**:
-  * Authorized gatekeeper calls `redeemTicket(tokenId)`.
-  * State transitions from `isRedeemed = false` to `isRedeemed = true`.
-  * Double redemption attempts revert with `TicketAlreadyRedeemed()`.
+  Secondary marketplace listings in `CricketMarketplace.listMatchTicket()` verify `isPriceWithinAntiScalpingCap(tokenId, price)`. Additionally, `_update()` blocks transferring redeemed or expired passes and increments `ticketNonces[tokenId]` on every transfer.
+* **One-Time Cryptographic Redemption Logic**:
+  * Ticket holder signs an EIP-191 challenge hash (`chainId`, contract, `tokenId`, `owner`, `ticketNonces[tokenId]`, `deadline`), and an authorized gatekeeper calls `redeemTicketWithSignature(...)` (or `redeemTicket(tokenId)`).
+  * State transitions permanently to `isRedeemed = true` (`used = true` in React UI), and double redemption attempts revert with `"MatchTicketNFT: Ticket already redeemed (Double-Entry Blocked)"`.
 
 ### 3.4 Non-Custodial Marketplace (`CricketMarketplace.sol`)
 * **Settlement**: Atomic exchange of CRIC tokens and NFTs.
@@ -130,7 +129,7 @@ $$\text{FinalPoints} = \text{BasePoints} \times \text{Multiplier}$$
 
 ### Squad Validation Constraints
 * Squad Size: Exactly 11 players.
-* Salary Cap: Maximum 100 virtual credits.
+* Salary Cap: Maximum 120 virtual credits.
 * Composition Requirements: $\ge 1\text{ Wicketkeeper}$, $\ge 3\text{ Batsmen}$, $\ge 3\text{ Bowlers}$, $\ge 1\text{ All-Rounder}$.
 
 ---

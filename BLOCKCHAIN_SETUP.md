@@ -34,16 +34,16 @@ Run `npm run chain:accounts` to print the local test keys for MetaMask. For the 
 1. **Collect a card:** use a wallet with CRIC, then collect a registered card. Fresh wallets can claim 50,000 test CRIC from the on-chain faucet. To register the full player catalog after deploying the updated contracts, run `npm run cards:register-all` for localhost or `npm run cards:register-all:amoy` for Amoy from the contract owner wallet.
 2. **Buy and sell:** the deployment seeds a 125 CRIC card listing and a 90 CRIC ticket listing. Buy from a different wallet than the seller. A buyer can then list an owned card or ticket from Auction Room. Listings are fixed-price marketplace orders, not timed bidding auctions. Card purchases use a 5% royalty. Ticket resale is capped at 15% above face value.
 3. **Join and win:** build an XI, join the open demo contest, and approve the 50 CRIC entry. The organizer wallet can lock entries and settle prizes to participant addresses. The contract moves entry fees into escrow, charges a 5% platform fee, and pays the rest on-chain. The Past filter shows a real seeded settlement and `PrizePaid` events.
-4. **Vote:** each option is a wallet transaction to `FanPolls`. One address can vote once per poll. Votes do not earn CRIC; they only record the fan's choice.
-5. **Scan a ticket:** the deployment makes one fixture live for four hours. Its holder signs an entry pass. Switch MetaMask to a wallet with `GATEKEEPER_ROLE`, paste the signed payload or use the camera, then verify entry. The contract rejects early, late, unauthorized, and duplicate scans.
+4. **Vote:** each option in `FanPolls.sol` allows one vote per address per poll and awards `VOTE_REWARD = 10 CRIC` from the contract reward pool on-chain (quick-poll clicks in the React tab update UI state for fast local demoing).
+5. **Scan a ticket:** the deployment creates scheduled fixtures (`#101`–`#104`), including live tickets whose holder signs a one-time EIP-191 challenge QR (`CVPASS1:<id>:<deadline>:<nonce>:<sig>`, 120s TTL). `MatchTicketNFT.redeemTicketWithSignature()` verifies the active match window, holder signature, nonce, and permanently sets `isRedeemed = true` while blocking transfers of redeemed or expired passes.
 
-The setup seeds scheduled demo ticket windows, three tournament states, two active polls, and active marketplace listings on the chain. Demo fixture windows are generated at deployment time so the Live, Upcoming, and Past filters are populated. They are practice records, not a live match feed or verified real-world results.
+The setup seeds four scheduled demo ticket windows, three tournament states, two active polls, and two marketplace listings on the chain. Demo fixture windows are generated at deployment time so the Live, Upcoming, and Past filters are populated.
 
 ## What is and is not on-chain
 
-CRIC balances, card ownership and primary minting, marketplace escrow and settlement, ticket ownership/resale limits/redemption, tournament entries/refunds/prizes, and fan poll votes are contract state or contract events. Ticket entry requires an EIP-1193 wallet and gatekeeper role.
+CRIC balances, card ownership and primary minting, marketplace escrow and settlement, ticket ownership/resale limits/nonces/redemption, tournament entries/refunds/prizes, and on-chain poll votes are contract state or contract events.
 
-The 4,800-player catalog and six-ball fantasy over are server-backed demo data. Tournament squads are committed as a hash, but their points and winners are not calculated by a trusted match oracle. An organizer reviews and enters winners. The `CricketOracleConsumer` is an authorized relayer contract; a live Chainlink Functions subscription and real cricket data source are not configured. Do not present simulated points as live scores or poll votes as token rewards.
+The ~4,800-player JSON catalog and 6-ball over simulator run client-side (with optional live ESPN scoreboard polling via `/espn-api` when online). Tournament squads are verified with Groth16 client-side in `src/scoringEngine.ts` and committed on-chain as a `bytes32` hash, while winners are submitted by the organizer (`onlyOwner`). `CricketOracleConsumer` is an owner/relayer-authorized contract without a live Chainlink Functions subscription.
 
 ## Shared Polygon Amoy access
 

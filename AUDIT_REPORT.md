@@ -11,19 +11,19 @@
 ---
 
 ## 1. Executive Summary
-This document records selected contract behavior and local Hardhat gas measurements for the **CricketVerse Web3 Ecosystem**. The current repository test suite has 47 passing tests against a local EVM. They do not establish 100% coverage, audit-level assurance, deployed-network behavior, or production safety. No independent audit or formal verification is claimed here.
+This document records selected contract behavior and local Hardhat gas measurements for the **CricketVerse Web3 Ecosystem**. The current repository test suite has 52 passing tests against a local EVM. They do not establish 100% coverage, audit-level assurance, deployed-network behavior, or production safety. No independent audit or formal verification is claimed here.
 
 ### Contracts Under Scope
 | Contract Name | File Path | Standard | Key Responsibility |
 | :--- | :--- | :--- | :--- |
-| **CRIC** | [`contracts/CRIC.sol`](file:///Users/tejaswinikunkulagunta/Desktop/DFCP/CricketVerse/contracts/CRIC.sol) | ERC-20 | Utility token, test faucet with 24h cooldown, capped supply |
-| **PlayerCardNFT** | [`contracts/PlayerCardNFT.sol`](file:///Users/tejaswinikunkulagunta/Desktop/DFCP/CricketVerse/contracts/PlayerCardNFT.sol) | ERC-1155 | Dynamic cricket cards (dNFTs), rarity multipliers, hard supply caps |
-| **MatchTicketNFT** | [`contracts/MatchTicketNFT.sol`](file:///Users/tejaswinikunkulagunta/Desktop/DFCP/CricketVerse/contracts/MatchTicketNFT.sol) | ERC-721 | Non-custodial anti-scalping tickets, $+15\%$ resale ceiling, turnstile redemption |
-| **CricketMarketplace** | [`contracts/CricketMarketplace.sol`](file:///Users/tejaswinikunkulagunta/Desktop/DFCP/CricketVerse/contracts/CricketMarketplace.sol) | Escrow | Trustless P2P exchange, atomic settlement, $5\%$ creator royalty, scalping checks |
-| **CardSVGGenerator** | [`contracts/CardSVGGenerator.sol`](file:///Users/tejaswinikunkulagunta/Desktop/DFCP/CricketVerse/contracts/CardSVGGenerator.sol) | On-Chain SVG | Dynamic RFC-2397 base64 vector art renderer with milestone badges |
-| **CricketOracleConsumer** | [`contracts/CricketOracleConsumer.sol`](file:///Users/tejaswinikunkulagunta/Desktop/DFCP/CricketVerse/contracts/CricketOracleConsumer.sol) | Oracle relay | Owner-authorized telemetry updates. No live Chainlink subscription is configured. |
-| **TournamentPool** | [`contracts/TournamentPool.sol`](file:///Users/tejaswinikunkulagunta/Desktop/DFCP/CricketVerse/contracts/TournamentPool.sol) | Escrow Pool | Non-custodial fantasy leagues, $95/5$ payout split, $100\%$ rain refund guarantee |
-| **FanPolls** | [`contracts/FanPolls.sol`](file:///Users/tejaswinikunkulagunta/Desktop/DFCP/CricketVerse/contracts/FanPolls.sol) | On-chain polls | Wallet-paid votes, one vote per address per poll, immutable vote counts |
+| **CRIC** | `contracts/CRIC.sol` | ERC-20 | Utility token, test faucet (`50,000 CRIC`, 1h cooldown), capped supply |
+| **PlayerCardNFT** | `contracts/PlayerCardNFT.sol` | ERC-1155 | Dynamic cricket cards (dNFTs), rarity multipliers, hard supply caps |
+| **MatchTicketNFT** | `contracts/MatchTicketNFT.sol` | ERC-721 | Anti-scalping tickets, $+15\%$ resale ceiling, EIP-191 holder-signed QR redemption & post-use transfer lock |
+| **CricketMarketplace** | `contracts/CricketMarketplace.sol` | Escrow | Fixed-price P2P exchange, atomic settlement, $5\%$ royalty, scalping checks |
+| **CardSVGGenerator** | `contracts/CardSVGGenerator.sol` | On-Chain SVG | Dynamic RFC-2397 base64 vector art renderer with milestone badges |
+| **CricketOracleConsumer** | `contracts/CricketOracleConsumer.sol` | Oracle relay | Owner-authorized telemetry updates. No live Chainlink subscription is configured. |
+| **TournamentPool** | `contracts/TournamentPool.sol` | Escrow Pool | Non-custodial fantasy leagues, $95/5$ payout split, $100\%$ rain refund guarantee |
+| **FanPolls** | `contracts/FanPolls.sol` | On-chain polls | One vote per address per poll, `10 CRIC` (`VOTE_REWARD`) on-chain vote reward |
 
 ---
 
@@ -45,12 +45,12 @@ This document records selected contract behavior and local Hardhat gas measureme
   * The unit test `SEC-01` proves that listing at $116\text{ CRIC}$ is reverted on-chain with:
     `"Marketplace: Scalping detected! Resale price exceeds 15% ceiling"`.
 
-### 2.3 Double-Entry / Replay Turnstile Attack — **MITIGATED**
-* **Threat:** An attendee duplicating a QR code pass or transferring a used ticket to admit multiple attendees through the turnstile.
+### 2.3 Double-Entry / Screenshot Replay / Used-Ticket Transfer — **MITIGATED**
+* **Threat:** An attendee screenshotting or duplicating a QR code, presenting a stale QR after selling the NFT, or transferring an already-redeemed pass to defraud a P2P buyer.
 * **Mitigation:**
-  * `MatchTicketNFT.redeemTicket` validates `!tickets[tokenId].isRedeemed` and requires the ticket's on-chain match window to be active.
-  * The boolean `isRedeemed` is permanently flipped to `true` on the first scan, logging the timestamp and gatekeeper address.
-  * Attempting to scan the ticket again reverts immediately with:
+  * `MatchTicketNFT.redeemTicketWithSignature` verifies an EIP-191 holder signature over `keccak256(chainId, address(this), tokenId, ownerOf(tokenId), ticketNonces[tokenId], deadline)`, active match window, and `block.timestamp <= deadline`.
+  * Transferring a ticket in `_update()` increments `ticketNonces[tokenId]` (invalidating any seller QR screenshots) and reverts if `isRedeemed == true` or the match window has ended.
+  * The boolean `isRedeemed` is permanently flipped to `true` on the first scan (`used` in React state); subsequent scans revert with:
     `"MatchTicketNFT: Ticket already redeemed (Double-Entry Blocked)"`.
 
 ### 2.4 Oracle Telemetry Spoofing & Replay Attack — **MITIGATED**
@@ -91,17 +91,17 @@ All gas measurements were captured on the Cancun EVM target using the `viaIR` So
 
 ---
 
-## 4. Automated Test Matrix Summary (47 passing)
+## 4. Automated Test Matrix Summary (52 passing)
 
-The local ecosystem suite covers contract behavior, security checks, gas benchmarks, scheduled ticket windows, and on-chain polls:
+The local ecosystem suite covers contract behavior, security checks, gas benchmarks, scheduled ticket windows, EIP-191 ticket entry passes, and on-chain polls:
 
 1. **`CricketVerse.test.js`** (Phase 1 assets, marketplace and ticket checks)
 2. **`Phase2_Ecosystem.test.js`** (SVG, oracle relayer and tournament pool)
 3. **`Phase3_Security_Gas.test.js`** (security and gas benchmarks)
-4. **`Phase4_OnchainCommunity.test.js`** (fan polls and ticket match windows)
-**Total: 47 passing tests.** This is not a coverage percentage and does not substitute for an audit.
+4. **`Phase4_OnchainCommunity.test.js`** (fan polls, ticket windows, EIP-191 signed QRs, expiry, nonce rotation & transfer locks)
+**Total: 52 passing tests.** This is not a coverage percentage and does not substitute for an audit.
 
 ---
 
 ## 5. Conclusion and remaining limits
-The contracts implement useful local-demo behaviors, including ERC-20/ERC-721/ERC-1155 assets, fixed-price marketplace escrow, scheduled ticket windows and redemption, tournament escrow/refunds/prizes, and on-chain fan polls. The browser integration currently targets the local Hardhat chain. Tournament winners are still selected by the organizer, squad commitments are not revealed or validated by the contract, and sports results are not supplied by a live Chainlink Functions deployment. A fresh deployment seeds three registered cards, three tickets, two marketplace listings, two polls, and upcoming/live/settled tournament examples. Fixture status data is generated for demo use and is not a live sports feed. Present the repository as a course prototype, not a production deployment or completed security audit.
+The contracts implement local-demo behaviors including ERC-20/ERC-721/ERC-1155 assets, fixed-price marketplace escrow (95/5 split), scheduled ticket windows with EIP-191 holder-signed QR redemption & post-redemption transfer locks, tournament escrow/refunds/prizes, and 1-vote-per-address fan polls (`10 CRIC` on-chain vote reward). The browser integration targets the local Hardhat chain (`31337`). Tournament winners are selected by the organizer, Groth16 ZK squad verification runs off-chain in TypeScript (`src/scoringEngine.ts`) rather than in a Solidity verifier, and sports results are not supplied by a live Chainlink Functions deployment. A fresh deployment seeds three registered cards, four scheduled tickets, two marketplace listings, two polls, and upcoming/live/settled tournament examples. Present the repository as a course prototype, not a production deployment or completed security audit.

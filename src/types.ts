@@ -98,6 +98,9 @@ export interface Ticket {
   owner: string;
   status: "LIVE" | "UPCOMING" | "PAST";
   used?: boolean;
+  nonce?: number;
+  redeemedAt?: number;
+  redeemedBy?: string;
 }
 
 export interface PollOption {

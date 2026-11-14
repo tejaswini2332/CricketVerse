@@ -137,9 +137,10 @@ async function main() {
     [now - 1 * demoHours, now + 3 * demoHours],
     [now + 48 * demoHours, now + 52 * demoHours],
   ];
-  await (await matchTicket.issueScheduledTicket(deployer.address, 101, 501, "Demo · Past fixture", "CricketVerse Arena", "West Pavilion", "P-101", ethers.parseEther("200"), ...windows[0])).wait();
-  await (await matchTicket.issueScheduledTicket(deployer.address, 102, 502, "Demo · Live fixture", "CricketVerse Arena", "East Upper", "E-102", ethers.parseEther("80"), ...windows[1])).wait();
-  await (await matchTicket.issueScheduledTicket(deployer.address, 103, 503, "Demo · Upcoming fixture", "CricketVerse Arena", "North Stand", "N-103", ethers.parseEther("80"), ...windows[2])).wait();
+  await (await matchTicket.issueScheduledTicket(deployer.address, 101, 501, "India vs Australia · Final (Past)", "CricketVerse Arena", "West Pavilion", "P-101", ethers.parseEther("200"), ...windows[0])).wait();
+  await (await matchTicket.issueScheduledTicket(deployer.address, 102, 502, "Mumbai Indians vs CSK · Live Fixture", "CricketVerse Arena", "East Upper", "E-102", ethers.parseEther("80"), ...windows[1])).wait();
+  await (await matchTicket.issueScheduledTicket(deployer.address, 103, 503, "India vs England · Upcoming", "CricketVerse Arena", "North Stand", "N-103", ethers.parseEther("80"), ...windows[2])).wait();
+  await (await matchTicket.issueScheduledTicket(deployer.address, 104, 504, "RCB vs KKR · Live Championship", "Eden Gardens, Kolkata", "Club House Tier 1", "Row D · Seat 18", ethers.parseEther("150"), now - demoHours, now + 4 * demoHours)).wait();
   const demoSigners = signers.slice(4, 7);
   const fundingAddresses = new Map([organizerAddress, gatekeeperAddress, treasuryAddress, ...demoSigners.map((s) => s.address)].map((address) => [address.toLowerCase(), address]));
   for (const address of fundingAddresses.values()) {
