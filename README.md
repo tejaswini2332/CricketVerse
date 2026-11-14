@@ -26,9 +26,9 @@ The global sports economy represents an estimated **$12.8 billion market**, span
 4. **Centralized Prize Custody:** Contest operators retain opaque custody of tournament entry fees, introducing counterparty and insolvency risks.
 
 **CricketVerse** eliminates these issues through an end-to-end decentralized application on Ethereum Cancun EVM:
-- **ERC-1155 Anti-Scalping Stadium Passes:** An immutable **15% maximum resale markup ceiling** enforced in the smart contract transfer hook (`safeTransferFrom`), coupled with **deterministic vector SVG QR codes** and laser turnstile scanners with double-entry prevention.
-- **Zero-Knowledge (ZK-SNARK) Squad Verification:** A **Groth16 circuit over the BN254 (alt_bn128) curve** that proves an 11-player lineup complies with the 120-credit salary cap and role balance without leaking tactical player identities prior to match start.
-- **Dynamic On-Chain NFTs (ERC-721):** Standalone, on-chain vector SVG card synthesis updated in real time via an **ESPN Cricket Live REST API** oracle pipeline.
+- **ERC-721 Anti-Scalping Stadium Passes (`MatchTicketNFT`):** An immutable **15% maximum resale markup ceiling** enforced in the smart contract (`11500 bps`), coupled with **deterministic vector SVG QR codes** and laser turnstile scanners with double-entry prevention.
+- **Zero-Knowledge (ZK-SNARK) Squad Verification:** A **Groth16 proof & commitment scheme over the BN254 (alt_bn128) prime field** that proves an 11-player lineup complies with the 120-credit salary cap and role balance without leaking tactical player identities prior to match start.
+- **Dynamic On-Chain NFTs (`PlayerCardNFT` ERC-1155):** Standalone, on-chain vector SVG card synthesis updated in real time via an **ESPN Cricket Live REST API** oracle pipeline.
 - **Non-Custodial English Auction Marketplace:** 10-minute anti-sniping soft-close extensions and automated escrow settlement.
 - **Fan DAO Governance:** Stake-weighted quadratic voting ($\text{Votes} = \lfloor\sqrt{\text{Balance}}\rfloor$) giving fans democratic control over tournament regulations.
 
@@ -61,9 +61,9 @@ The global sports economy represents an estimated **$12.8 billion market**, span
                                      v
 +---------------------------------------------------------------------------------------+
 |                         SOLIDITY 0.8.24 SMART CONTRACT SUITE                          |
-|  * CricketToken ($CRIC)            * PlayerCardNFT (ERC-721)  * MatchTicketNFT (1155) |
-|  * CricketMarketplace (Escrow)     * MatchdayOracle (Chainlink) * TournamentPool (ZK) |
-|  * CardSVGGenerator (On-Chain)     * FanPolls (DAO Governance)* StakingRewards (Yield)|
+|  * CRIC Utility Token (ERC-20)      * PlayerCardNFT (ERC-1155) * MatchTicketNFT (721)   |
+|  * CricketMarketplace (Escrow)     * CricketOracleConsumer      * TournamentPool (ZK)    |
+|  * CardSVGGenerator (On-Chain)     * FanPolls (Governance)                               |
 +---------------------------------------------------------------------------------------+
 ```
 
@@ -103,18 +103,17 @@ The global sports economy represents an estimated **$12.8 billion market**, span
 - **Deterministic 6-Ball Over Simulator:** Simulates live overs (runs, boundaries, extras, dismissals) with commentary telemetry.
 
 ### 5. Zero-Knowledge (ZK-SNARK) Squad Verification
-- **Groth16 over the BN254 (alt_bn128) Curve:** Proves an 11-player squad satisfies all constraints without revealing the secret player identities prior to match start.
-- **Secret Witness:** $W = (p_1, \dots, p_{11}, \sigma)$, with cryptographic blinding salt $\sigma \in \{0,1\}^{256}$.
-- **Cryptographic Commitment:** $C = \text{Keccak256}(\text{Sorted}(p) \parallel \sigma)$.
-- **Bilinear Pairing Verification:**
-  $$e(\pi_A, \pi_B) = e(\alpha, \beta) \cdot e(\pi_C, \delta) \cdot e\left(K_0 + \sum_{i=1}^l w_i K_i, \gamma\right)$$
-- **Interactive UI Controls:** Generate witness, perform pairing check verification (`VK_CRIC_SQUAD_BN254_REV1`), inspect raw JSON proof artifact, and commit proof on-chain.
+- **Groth16 over the BN254 (`alt_bn128`) Prime Field:** Proves an 11-player squad satisfies all constraints without revealing the secret player identities prior to match start.
+- **Secret Witness:** $W = (p_1, \dots, p_{11}, \sigma)$, with 256-bit cryptographic blinding salt $\sigma \in \{0,1\}^{256}$.
+- **Canonical Commitment:** $C = \text{Keccak256}(\text{Sorted}(p) \parallel \sigma)$ packed alongside `[commitmentHash, packedConstraints, tournamentId, timestamp]` public signals.
+- **Full Verifier Suite (`VK_CRIC_SQUAD_BN254_REV1`):** Validates BN254 base-field membership ($1 \le x < p$), R1CS role quotas & 11-player sum, packed public signals, deterministic witness integrity, squad-commitment opening match, and includes a 1-click **Tamper Test** to verify forged proofs are rejected.
+- **Tournament & On-Chain Integration:** Commit verified ZK proofs on-chain or automatically attach your real Groth16 commitment hash when entering `TournamentPool` contests.
 
 ### 6. Stadium Passes (Anti-Scalping Smart Ticketing)
-- **Immutable 15% Resale Markup Cap:** Hard-coded into `safeTransferFrom` of `StadiumPassERC1155.sol`, permanently blocking price gouging:
+- **Immutable 15% Resale Markup Cap:** Hard-coded into `MatchTicketNFT.sol` & `CricketMarketplace.sol`, permanently blocking price gouging:
   $$\text{salePrice} \le \text{faceValue} \times 1.15$$
 - **Anti-Scalping Auditor:** Real-time pricing calculator to test secondary listing compliance.
-- **Deterministic Vector SVG QR Codes:** Lightweight, resolution-independent vector QR codes generated client-side from `Keccak256("CV-PASS-" + tokenId)`.
+- **Deterministic Vector SVG QR Codes:** Lightweight, resolution-independent vector QR codes generated client-side from `CV-PASS-<tokenId>`.
 - **Stadium Turnstile Laser Scanner:** Animated gate scanner with atomic state mutation (`used = true`) and strict double-entry prevention.
 
 ### 7. Fan DAO Governance
@@ -134,14 +133,14 @@ All 8 smart contracts are deployed on the local Cancun Hardhat EVM (Chain ID `31
 
 | Contract | Standard / Interface | Address (Local Hardhat) | Description |
 |---|---|---|---|
-| **CricketToken** | ERC-20 + Burnable + Permit | `0x5FbDB2315678afecb367f032d93F642f64180aa3` | Primary $CRIC utility token (10,000,000 max supply) |
-| **PlayerCardNFT** | ERC-721 Dynamic URI | `0xe7f1725E7734CE288F8367e1Bb143E90bb3F0512` | Collectible player cards with evolving telemetry |
-| **MatchTicketNFT** | ERC-1155 + ResaleCap | `0x9fE46736679d2D9a65F0992F2272dE9f3c7fa6e0` | Matchday stadium passes with 15% resale markup ceiling |
-| **CricketMarketplace** | English Auction Escrow | `0xCf7Ed3AccA5a467e9e704C703E8D87F634fB0Fc9` | Secondary marketplace with anti-sniping soft-close |
-| **CardSVGGenerator** | On-Chain SVG Engine | `0xDc64a140Aa3E981100a9becA4E685f962f0cF6C9` | Standalone SVG synthesis library for player cards |
-| **CricketOracleConsumer** | Chainlink-Compatible Oracle | `0x5FC8d32690cc91D4c39d9d3abcBD16989F875707` | Consumes live match telemetry and updates cards |
-| **TournamentPool** | ZK-Verified Prize Escrow | `0x0165878A594ca255338adfa4d48449f69242Eb8F` | Fantasy tournament entry, escrow, and 95/5 payout |
-| **FanPolls** | Quadratic Voting DAO | `0xa513E6E4b8f2a923D98304ec87F64353C4D5C853` | Decentralized fan polls and ecosystem governance |
+| **CRIC** | ERC-20 + Burnable | `0x5FbDB2315678afecb367f032d93F642f64180aa3` | Primary $CRIC utility token (100,000,000 max supply, 50k faucet) |
+| **PlayerCardNFT** | ERC-1155 Dynamic URI | `0xe7f1725E7734CE288F8367e1Bb143E90bb3F0512` | Collectible player cards with evolving telemetry & tier caps |
+| **MatchTicketNFT** | ERC-721 + ResaleCap | `0x9fE46736679d2D9a65F0992F2272dE9f3c7fa6e0` | Matchday stadium passes with 15% resale markup ceiling |
+| **CricketMarketplace** | Escrow P2P Marketplace | `0xa513E6E4b8f2a923D98304ec87F64353C4D5C853` | Secondary marketplace with 5% royalties & anti-scalping checks |
+| **CardSVGGenerator** | On-Chain SVG Engine | `0x2279B7A0a67DB372996a5FaB50D91eAA73d2eBe6` | Standalone SVG synthesis library for player cards |
+| **CricketOracleConsumer** | Chainlink-Compatible Oracle | `0x8A791620dd6260079BF849Dc5567aDC3F2FdC318` | Consumes live match telemetry and updates player cards |
+| **TournamentPool** | ZK-Verified Prize Escrow | `0xA51c1fc2f0D1a1b8494Ed1FE312d7C3a78Ed91C0` | Fantasy tournament entry, escrow, and 95/5 payout |
+| **FanPolls** | Governance & Vote Rewards | `0x0DCd1Bf9A1b36cE34237eEaFef220932846BCD82` | Decentralized fan polls with CRIC vote rewards |
 
 ---
 
@@ -222,7 +221,32 @@ Open **[http://localhost:3000](http://localhost:3000)** in your browser.
      0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80
      ```
    - Target test address: `0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266` (Loaded with 10,000 test ETH and $CRIC tokens).
-3. Alternatively, click **"Claim 50,000 CRIC"** and **"Claim 20 Demo ETH"** directly in the top header.
+3. Alternatively, click **"Claim 50,000 CRIC"** and **"Get 20 demo ETH"** directly in the top header.
+
+---
+
+## 🔄 Wallet Balance Persistence & Starting Over (Reset Guide)
+
+### Why does my balance stay (e.g. `49,014 CRIC`) when I reload the page?
+- When you click **Claim 50,000 CRIC**, `CRIC.sol` mints `50,000 CRIC` to your wallet (`0x4C349eBf4E712eA69f04C4F49bC15c6182d9aC37`) directly on the local Hardhat EVM node (`127.0.0.1:8545`).
+- Every purchase (such as minting a player card, buying from the auction room, buying a stadium pass, committing a ZK proof, or joining a tournament) executes a real on-chain `CRIC` transfer. Your resulting balance (e.g., `49,014 CRIC` after spending `986 CRIC`) is read live from the blockchain, so refreshing the browser keeps your exact on-chain balance as long as the Hardhat node stays running.
+
+### Will it reset to `0 CRIC` and show the claim buttons again on restart?
+- **Yes — when the Hardhat blockchain node itself restarts:** Local Hardhat (`npx hardhat node`) stores blockchain state in memory. Whenever you completely stop and restart the local Hardhat node (`127.0.0.1:8545`) or start a fresh environment, the contracts are re-deployed and the wallet starts back at `0.00 CRIC` and `0.5 ETH`, with both **"Claim 50,000 CRIC"** and **"Get 20 demo ETH"** restored in the header.
+- **Note on Vite Dev Server vs. Hardhat Node:** `vite.config.ts` spawns Hardhat as a detached background process, so simply restarting Vite or refreshing the browser will keep the existing Hardhat chain alive unless the Hardhat process itself is stopped or you run the reset command below.
+
+### How to Start Over from `0 CRIC` Anytime (Without Restarting the Server)
+Run this single command from the project root while the local Hardhat node is running:
+
+```bash
+node scripts/reset_user_wallet.js
+```
+
+**What this command does:**
+1. Transfers all remaining `CRIC` tokens from `0x4C349eBf4E712eA69f04C4F49bC15c6182d9aC37` back to the deployer treasury (`0.00 CRIC` balance).
+2. Advances the local Hardhat EVM block timestamp (`evm_increaseTime`) past the 1-hour `CRIC` faucet cooldown if you already claimed in this session.
+3. Resets your wallet's gas balance to `0.5 ETH`.
+4. After running it, your UI automatically updates (within a few seconds or on refresh) to `0.00 CRIC` with both **"Claim 50,000 CRIC"** and **"Get 20 demo ETH"** ready to claim again.
 
 ---
 
@@ -242,8 +266,8 @@ npx hardhat test
 cricketverse/
 ├── contracts/                     # Solidity 0.8.24 Smart Contracts
 │   ├── CRIC.sol                  # ERC-20 utility token with test faucet
-│   ├── PlayerCardNFT.sol         # ERC-721 dynamic sports cards
-│   ├── MatchTicketNFT.sol        # ERC-1155 anti-scalping gate passes
+│   ├── PlayerCardNFT.sol         # ERC-1155 dynamic sports cards
+│   ├── MatchTicketNFT.sol        # ERC-721 anti-scalping gate passes
 │   ├── CricketMarketplace.sol    # English auction & non-custodial escrow
 │   ├── CardSVGGenerator.sol      # On-chain dynamic vector SVG renderer
 │   ├── CricketOracleConsumer.sol # Chainlink-compatible match oracle

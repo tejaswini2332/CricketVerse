@@ -14,6 +14,7 @@ async function main() {
   const iface = new Interface([
     "function balanceOf(address) view returns (uint256)",
     "function transfer(address to, uint256 amount) returns (bool)",
+    "function lastFaucetClaim(address) view returns (uint256)",
   ]);
 
   const balHex = await provider.call({
@@ -33,6 +34,21 @@ async function main() {
     console.log("Cleared CRIC tx:", txHash);
   }
 
+  // Advance EVM block time past CRIC faucet 1-hour cooldown if the user previously claimed in this node session
+  const lastClaimHex = await provider.call({
+    to: cricAddress,
+    data: iface.encodeFunctionData("lastFaucetClaim", [targetAddress]),
+  });
+  const lastClaim = BigInt(lastClaimHex);
+  const latestBlock = await provider.getBlock("latest");
+  const nowTs = BigInt(latestBlock?.timestamp ?? Math.floor(Date.now() / 1000));
+  if (lastClaim > 0n && nowTs < lastClaim + 3600n) {
+    const jumpSeconds = Number(lastClaim + 3601n - nowTs);
+    await provider.send("evm_increaseTime", [jumpSeconds]);
+    await provider.send("evm_mine", []);
+    console.log(`Advanced local EVM clock by ${jumpSeconds}s to unlock CRIC faucet claim.`);
+  }
+
   // Set user ETH balance to 0.5 ETH so they have initial gas to sign transactions, and can claim 20 Demo ETH
   await provider.send("hardhat_setBalance", [
     targetAddress,
@@ -47,6 +63,7 @@ async function main() {
   });
   console.log("ETH Balance:", formatEther(await provider.getBalance(targetAddress)));
   console.log("CRIC Balance:", formatEther(BigInt(finalCricHex)));
+  console.log("Ready to start over! Refresh the browser to see 'Claim 50,000 CRIC' and 'Get 20 demo ETH'.");
 }
 
 main().catch((err) => {

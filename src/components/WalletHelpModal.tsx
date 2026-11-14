@@ -211,8 +211,8 @@ export const WalletHelpModal: React.FC = () => {
         <div style={{ background: "#fdf8ec", border: "1px solid #fde68a", borderRadius: "10px", padding: "14px 16px", fontSize: "0.85rem", color: "#92400e" }}>
           <strong style={{ display: "block", marginBottom: "4px" }}>Why did you not see transactions before?</strong>
           <ul style={{ margin: 0, paddingLeft: "18px", lineHeight: 1.5 }}>
-            <li>Previously, the contracts were not compiled or deployed to an active blockchain node.</li>
-            <li>We have now deployed all 8 contracts, registered all 4,797 player cards, and sent 100 ETH + 100,000 CRIC to your wallet.</li>
+            <li>All 8 smart contracts are deployed on the local Cancun EVM (Chain ID 31337) and synced to your wallet.</li>
+            <li>Use <strong>Claim 50,000 CRIC</strong> and <strong>Get 20 demo ETH</strong> in the header anytime your wallet starts at 0 CRIC.</li>
             <li>In MetaMask, switch your network to <strong>CricketVerse Local Devnet</strong> using the button above to view your on-chain balance and approve transactions.</li>
           </ul>
         </div>

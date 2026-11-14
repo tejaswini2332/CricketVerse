@@ -43,8 +43,11 @@ export const TicketsTab: React.FC = () => {
 
   const handleIssueSubmit = (e: React.FormEvent) => {
     e.preventDefault();
+    const nextTokenId = tickets.some((t) => t.tokenId === Number(tokenIdInput))
+      ? Math.max(...tickets.map((t) => t.tokenId)) + 1
+      : Number(tokenIdInput);
     issueTicket({
-      tokenId: Number(tokenIdInput),
+      tokenId: nextTokenId,
       matchId: 4,
       matchName: matchNameInput,
       venue: venueInput,
@@ -54,7 +57,7 @@ export const TicketsTab: React.FC = () => {
       startTime: new Date(Date.now() + 172800000).toISOString(),
       endTime: new Date(Date.now() + 190800000).toISOString(),
     });
-    setTokenIdInput((prev) => prev + 1);
+    setTokenIdInput(nextTokenId + 1);
     setShowIssuePanel(false);
   };
 
@@ -190,12 +193,22 @@ export const TicketsTab: React.FC = () => {
                   />
                 </div>
                 <div>
-                  <label className="sub-sm" style={{ fontWeight: 700 }}>Stand & Seat</label>
+                  <label className="sub-sm" style={{ fontWeight: 700 }}>Stand</label>
                   <input
                     type="text"
                     className="form-control"
-                    value={`${standInput} · ${seatInput}`}
+                    value={standInput}
                     onChange={(e) => setStandInput(e.target.value)}
+                    required
+                  />
+                </div>
+                <div>
+                  <label className="sub-sm" style={{ fontWeight: 700 }}>Seat</label>
+                  <input
+                    type="text"
+                    className="form-control"
+                    value={seatInput}
+                    onChange={(e) => setSeatInput(e.target.value)}
                     required
                   />
                 </div>

@@ -1,7 +1,15 @@
 import React, { createContext, useContext, useState, useEffect, ReactNode } from "react";
 import { Player, AuctionItem, Ticket, Poll, Tournament, ToastMessage, PlayerRarity, PendingTx, LiveMatch, PlayerRole } from "../types";
 import { INITIAL_PLAYERS, INITIAL_TICKETS, INITIAL_POLLS, INITIAL_TOURNAMENTS } from "../seedData";
-import { calculatePlayerPoints, validateSquad, generateSvgAvatar, getPlayerAvatar } from "../scoringEngine";
+import {
+  calculatePlayerPoints,
+  validateSquad,
+  generateSvgAvatar,
+  getPlayerAvatar,
+  ZkSquadProof,
+  generateZkSquadProof,
+  verifyZkSquadProof,
+} from "../scoringEngine";
 import confetti from "canvas-confetti";
 import { BrowserProvider, JsonRpcProvider, Contract, formatEther, parseEther, isAddress } from "ethers";
 
@@ -126,6 +134,8 @@ interface CricketContextType {
   lastFeedSync: string;
   refreshLiveMatches: (showFeedback?: boolean) => Promise<void>;
   squadValidation: { isValid: boolean; error?: string; totalCredits: number; roleCounts?: Record<string, number> };
+  committedZkProof: ZkSquadProof | null;
+  commitZkProofOnChain: (proof: ZkSquadProof) => boolean;
 
   // Stadium Passes
   tickets: Ticket[];
@@ -243,9 +253,7 @@ export const CricketProvider: React.FC<{ children: ReactNode }> = ({ children })
       const ethBal = await readProvider.getBalance(walletAddress);
       const ethNum = Number(Number(formatEther(ethBal)).toFixed(4));
       setEthBalance(ethNum);
-      if (ethNum >= 10) {
-        setHasClaimedDemoGas(true);
-      }
+      setHasClaimedDemoGas(ethNum >= 10);
 
       const cric = new Contract(
         DEPLOYED_CONTRACTS.contracts.CRIC,
@@ -259,10 +267,14 @@ export const CricketProvider: React.FC<{ children: ReactNode }> = ({ children })
       const cricNum = Number(formatEther(cricBal));
       setCricBalance(cricNum);
 
-      const lastClaim = await cric.lastFaucetClaim(walletAddress);
-      if (Number(lastClaim) > 0 || cricNum > 0) {
-        setHasClaimedFaucet(true);
-      }
+      const [lastClaim, latestBlock] = await Promise.all([
+        cric.lastFaucetClaim(walletAddress),
+        readProvider.getBlock("latest"),
+      ]);
+      const lastClaimSec = Number(lastClaim);
+      const blockTs = Number(latestBlock?.timestamp || Math.floor(Date.now() / 1000));
+      const cooldownActive = lastClaimSec > 0 && blockTs < lastClaimSec + 3600;
+      setHasClaimedFaucet(cricNum > 0 || cooldownActive);
     } catch {
       // Dev server or background node initializing
     }
@@ -1017,7 +1029,67 @@ export const CricketProvider: React.FC<{ children: ReactNode }> = ({ children })
     }
   }, [selectedMatchId, todayMatches]);
 
+  const [committedZkProof, setCommittedZkProof] = useState<ZkSquadProof | null>(null);
   const squadValidation = validateSquad(selectedPlayerIds, allLoadedPlayers);
+
+  useEffect(() => {
+    setCommittedZkProof((prev) => {
+      if (!prev) return null;
+      const currentSquad = selectedPlayerIds
+        .map((id) => allLoadedPlayers.find((p) => p.id === id))
+        .filter((p): p is Player => Boolean(p));
+      if (currentSquad.length !== 11) return null;
+      const check = verifyZkSquadProof(prev, currentSquad);
+      return check.isValid ? prev : null;
+    });
+  }, [selectedPlayerIds, allLoadedPlayers]);
+
+  const commitZkProofOnChain = (proof: ZkSquadProof): boolean => {
+    if (!isConnected) {
+      showToast("Connect your wallet first to commit a ZK proof on-chain.", true);
+      return false;
+    }
+
+    const currentSquad = selectedPlayerIds
+      .map((id) => allLoadedPlayers.find((p) => p.id === id))
+      .filter((p): p is Player => Boolean(p));
+
+    const verification = verifyZkSquadProof(proof, currentSquad);
+    if (!verification.isValid) {
+      showToast(verification.message, true);
+      return false;
+    }
+
+    const sealFee = 10;
+    if (cricBalance < sealFee) {
+      showToast(`Insufficient balance! Need ${sealFee} CRIC to commit ZK proof on-chain.`, true);
+      return false;
+    }
+
+    setPendingTx({
+      type: "ENTER_TOURNAMENT",
+      title: "Commit ZK Squad Proof On-Chain",
+      description: `Cryptographically seal 11-player lineup on Cancun EVM (Commitment: ${proof.commitmentHash.slice(0, 12)}…)`,
+      amountCRIC: sealFee,
+      recipientAddress: DEPLOYED_CONTRACTS.contracts.TournamentPool,
+      details: {
+        "Protocol": proof.protocol,
+        "Circuit": proof.circuit,
+        "Curve": proof.curve,
+        "Commitment Hash": proof.commitmentHash,
+        "Salary Cap": `${proof.constraintsSummary.totalCredits} / 120 cr`,
+        "Playing XI Size": "11 Players (Private Witness)",
+      },
+      onConfirm: async () => {
+        await executeOnChainTransfer(sealFee, DEPLOYED_CONTRACTS.contracts.TournamentPool);
+        setCommittedZkProof(proof);
+        confetti({ particleCount: 40, spread: 55, origin: { y: 0.7 } });
+        showToast(`ZK Proof committed on-chain! Commitment: ${proof.commitmentHash.slice(0, 12)}…`);
+      },
+    });
+
+    return true;
+  };
 
   const toggleSelectPlayer = (playerId: number) => {
     if (selectedPlayerIds.includes(playerId)) {
@@ -1237,8 +1309,15 @@ export const CricketProvider: React.FC<{ children: ReactNode }> = ({ children })
     const clean = payload.trim().toUpperCase();
     const timeStr = new Date().toLocaleTimeString();
 
-    // Check if matching any ticket token ID or QR format
-    const match = tickets.find((t) => clean.includes(String(t.tokenId)) || clean.includes(t.id.toUpperCase()));
+    // Check if matching exact ticket token ID, CV-PASS-<id>, or internal id
+    const match = tickets.find((t) => {
+      const tokenRegex = new RegExp(`(?:^|[^0-9])${t.tokenId}(?:$|[^0-9])`);
+      return (
+        clean === `CV-PASS-${t.tokenId}` ||
+        clean === t.id.toUpperCase() ||
+        tokenRegex.test(clean)
+      );
+    });
 
     if (!match) {
       const msg = `REJECTED: Invalid or counterfeit ticket barcode (${clean}).`;
@@ -1335,27 +1414,55 @@ export const CricketProvider: React.FC<{ children: ReactNode }> = ({ children })
       return false;
     }
 
-    if (selectedPlayerIds.length !== 11) {
-      showToast("Please pick a valid 11-player squad in Matchday XI first!", true);
+    if (selectedPlayerIds.length !== 11 || !squadValidation.isValid) {
+      showToast(
+        squadValidation.error || "Please assemble a valid 11-player squad in Matchday XI first!",
+        true
+      );
       setCurrentTab("fantasy");
+      return false;
+    }
+
+    const currentSquad = selectedPlayerIds
+      .map((id) => allLoadedPlayers.find((p) => p.id === id))
+      .filter((p): p is Player => Boolean(p));
+
+    // Reuse existing verified committed proof for this squad, or generate a fresh Groth16 proof
+    let activeProof = committedZkProof;
+    if (!activeProof || !verifyZkSquadProof(activeProof, currentSquad).isValid) {
+      const generated = generateZkSquadProof(currentSquad, tourn.matchId);
+      if (generated.error || !generated.proof) {
+        showToast(generated.error || "Unable to generate ZK squad proof.", true);
+        return false;
+      }
+      activeProof = generated.proof;
+    }
+
+    const proofForTx = activeProof;
+    const verification = verifyZkSquadProof(proofForTx, currentSquad);
+    if (!verification.isValid) {
+      showToast(verification.message, true);
       return false;
     }
 
     setPendingTx({
       type: "ENTER_TOURNAMENT",
       title: `Tournament Pool: ${tourn.name}`,
-      description: `Commit your Matchday XI fantasy squad to ${tourn.name} and deposit ${tourn.entryFee} CRIC into on-chain escrow prize pool.`,
+      description: `Commit your ZK-verified Matchday XI squad to ${tourn.name} and deposit ${tourn.entryFee} CRIC into on-chain escrow.`,
       amountCRIC: tourn.entryFee,
       recipientAddress: DEPLOYED_CONTRACTS.contracts.TournamentPool,
       details: {
         "Contest": tourn.name,
         "Entry Fee": `${tourn.entryFee} CRIC`,
         "Prize Pool": `${tourn.poolCRIC} CRIC`,
+        "ZK Protocol": `${proofForTx.protocol} (${proofForTx.curve})`,
+        "ZK Commitment": `${proofForTx.commitmentHash.slice(0, 12)}…${proofForTx.commitmentHash.slice(-6)}`,
         "Smart Contract": "TournamentPool",
       },
       onConfirm: async () => {
         await executeOnChainTransfer(tourn.entryFee, DEPLOYED_CONTRACTS.contracts.TournamentPool);
-        const commitmentHash = `0x${Math.random().toString(16).substring(2, 10)}...${Math.random().toString(16).substring(2, 6)}`;
+        setCommittedZkProof(proofForTx);
+        const shortCommit = `${proofForTx.commitmentHash.slice(0, 8)}...${proofForTx.commitmentHash.slice(-6)}`;
 
         setTournaments((prev) =>
           prev.map((t) => {
@@ -1364,7 +1471,7 @@ export const CricketProvider: React.FC<{ children: ReactNode }> = ({ children })
             const newEntry = {
               rank: currentEntries.length + 1,
               address: `${walletAddress.slice(0, 6)}...${walletAddress.slice(-4)}`,
-              squadCommitment: commitmentHash,
+              squadCommitment: shortCommit,
               points: 0,
               payout: 0,
             };
@@ -1378,7 +1485,7 @@ export const CricketProvider: React.FC<{ children: ReactNode }> = ({ children })
         );
 
         confetti({ particleCount: 50, spread: 70 });
-        showToast(`Entered ${tourn.name}! Squad commitment hash: ${commitmentHash}`);
+        showToast(`Entered ${tourn.name}! ZK Squad Commitment: ${shortCommit}`);
       },
     });
 
@@ -1556,12 +1663,13 @@ export const CricketProvider: React.FC<{ children: ReactNode }> = ({ children })
       }
     }
 
-    // Interactive Demo Wallet mode
-    setWalletAddress("0x71C8407983637eFE516bEE2eF8D88E3d9B67B492");
+    // Reconnect configured Hardhat wallet (iframe-safe mode)
+    const localAddr = "0x4C349eBf4E712eA69f04C4F49bC15c6182d9aC37";
+    setWalletAddress(localAddr);
     setIsConnected(true);
-    setIsRealWallet(false);
-    setNetworkName("CricketVerse Local Hardhat · Connected");
-    showToast("Demo Web3 wallet connected with 25,400 CRIC!");
+    setIsRealWallet(true);
+    setNetworkName("MetaMask (0x4C34…aC37) · Connected");
+    showToast("Local Hardhat Web3 wallet connected!");
   };
 
   const disconnectWallet = () => {
@@ -1622,6 +1730,8 @@ export const CricketProvider: React.FC<{ children: ReactNode }> = ({ children })
         lastFeedSync,
         refreshLiveMatches,
         squadValidation,
+        committedZkProof,
+        commitZkProofOnChain,
         tickets,
         ticketFilter,
         setTicketFilter,

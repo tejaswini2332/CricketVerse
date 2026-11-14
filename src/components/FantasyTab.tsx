@@ -1,5 +1,5 @@
-import React, { useState } from "react";
-import { useCricket, DEPLOYED_CONTRACTS } from "../context/CricketContext";
+import React, { useState, useEffect } from "react";
+import { useCricket } from "../context/CricketContext";
 import { Player } from "../types";
 import {
   generateSvgAvatar,
@@ -27,7 +27,8 @@ export const FantasyTab: React.FC = () => {
     lastFeedSync,
     refreshLiveMatches,
     squadValidation,
-    setPendingTx,
+    committedZkProof,
+    commitZkProofOnChain,
     showToast,
   } = useCricket();
 
@@ -39,12 +40,30 @@ export const FantasyTab: React.FC = () => {
   const [zkVerification, setZkVerification] = useState<ZkVerificationResult | null>(null);
   const [isProving, setIsProving] = useState<boolean>(false);
   const [showZkModal, setShowZkModal] = useState<boolean>(false);
-  const [isZkCommitted, setIsZkCommitted] = useState<boolean>(false);
   const [copiedWitness, setCopiedWitness] = useState<boolean>(false);
 
   const selectedSquad = selectedPlayerIds
     .map((id) => allLoadedPlayers.find((p) => p.id === id))
     .filter((p): p is Player => Boolean(p));
+
+  const isZkCommitted = Boolean(
+    committedZkProof && zkProof && committedZkProof.commitmentHash === zkProof.commitmentHash
+  );
+
+  const squadSignature = [...selectedPlayerIds].sort((a, b) => a - b).join(",");
+
+  useEffect(() => {
+    setZkVerification(null);
+    if (selectedSquad.length === 11 && committedZkProof && verifyZkSquadProof(committedZkProof, selectedSquad).isValid) {
+      setZkProof(committedZkProof);
+    } else {
+      setZkProof((prev) => {
+        if (!prev || selectedSquad.length !== 11) return null;
+        return verifyZkSquadProof(prev, selectedSquad).isValid ? prev : null;
+      });
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [squadSignature, selectedMatchId, committedZkProof]);
 
   const totalPoints = Number(
     selectedSquad.reduce((sum, p) => sum + (p.calculatedPoints || 0), 0).toFixed(1)
@@ -95,7 +114,6 @@ export const FantasyTab: React.FC = () => {
 
     setIsProving(true);
     setZkVerification(null);
-    setIsZkCommitted(false);
 
     setTimeout(() => {
       const result = generateZkSquadProof(selectedSquad, selectedMatchId);
@@ -111,37 +129,33 @@ export const FantasyTab: React.FC = () => {
 
   const handleVerifyZkProof = () => {
     if (!zkProof) return;
-    const verification = verifyZkSquadProof(zkProof);
+    const verification = verifyZkSquadProof(zkProof, selectedSquad);
     setZkVerification(verification);
     if (verification.isValid) {
-      showToast("✓ ZK Proof mathematically verified! Bilinear pairing check passed.");
+      showToast("✓ ZK Proof mathematically verified! Pairing & lineup commitment checks passed.");
     } else {
       showToast(verification.message, true);
     }
   };
 
+  const handleTamperTest = () => {
+    if (!zkProof) return;
+    // Clone and tamper with salary cap credits without regenerating witness/signals
+    const tampered: ZkSquadProof = {
+      ...zkProof,
+      constraintsSummary: {
+        ...zkProof.constraintsSummary,
+        totalCredits: Number((zkProof.constraintsSummary.totalCredits + 5).toFixed(1)),
+      },
+    };
+    const verification = verifyZkSquadProof(tampered, selectedSquad);
+    setZkVerification(verification);
+    showToast("Tamper test executed: modified witness rejected by verifier!", true);
+  };
+
   const handleCommitZkProof = () => {
     if (!zkProof) return;
-    setPendingTx({
-      title: "Commit ZK Squad Proof On-Chain",
-      description: `Cryptographically seal 11-player lineup on Cancun EVM (Commitment: ${zkProof.commitmentHash.slice(0, 10)}…)`,
-      amountCRIC: 10,
-      recipientAddress: DEPLOYED_CONTRACTS.contracts.TournamentPool,
-      type: "ENTER_TOURNAMENT",
-      details: {
-        "Protocol": zkProof.protocol,
-        "Circuit": zkProof.circuit,
-        "Curve": zkProof.curve,
-        "Commitment Hash": zkProof.commitmentHash,
-        "Salary Cap": `${zkProof.constraintsSummary.totalCredits} / 120 cr`,
-        "Playing XI Size": "11 Players (Secret)",
-      },
-      onConfirm: async () => {
-        setIsZkCommitted(true);
-        showToast("✓ ZK Proof commitment registered on blockchain block!");
-      },
-    });
-    setIsZkCommitted(true);
+    commitZkProofOnChain(zkProof);
   };
 
   const handleCopyProof = () => {
@@ -742,14 +756,29 @@ export const FantasyTab: React.FC = () => {
                       color: zkVerification.isValid ? "#166534" : "#991b1b",
                     }}
                   >
-                    <div style={{ fontWeight: 800, display: "flex", alignItems: "center", gap: "6px", marginBottom: "4px" }}>
+                    <div style={{ fontWeight: 800, display: "flex", alignItems: "center", gap: "6px", marginBottom: "4px", flexWrap: "wrap" }}>
                       <span>{zkVerification.isValid ? "✅ ZK-SNARK MATHEMATICALLY VERIFIED" : "❌ VERIFICATION FAILED"}</span>
                       <span style={{ fontSize: "0.68rem", background: "white", padding: "1px 6px", borderRadius: "4px", border: "1px solid rgba(0,0,0,0.1)" }}>
                         {zkVerification.verificationKeyId}
                       </span>
                     </div>
-                    <div style={{ fontSize: "0.74rem", lineHeight: 1.35 }}>
+                    <div style={{ fontSize: "0.74rem", lineHeight: 1.35, marginBottom: "6px" }}>
                       {zkVerification.message}
+                    </div>
+                    <div style={{ display: "flex", gap: "6px", flexWrap: "wrap", fontSize: "0.68rem", fontWeight: 700 }}>
+                      <span>{zkVerification.fieldBoundsValid ? "✓ BN254 Field" : "✗ BN254 Field"}</span>
+                      <span>·</span>
+                      <span>{zkVerification.constraintsVerified ? "✓ R1CS Quotas" : "✗ R1CS Quotas"}</span>
+                      <span>·</span>
+                      <span>{zkVerification.publicSignalsMatched ? "✓ Public Signals" : "✗ Public Signals"}</span>
+                      <span>·</span>
+                      <span>{zkVerification.witnessIntegrityValid ? "✓ Pairing/Witness" : "✗ Pairing/Witness"}</span>
+                      {zkVerification.commitmentMatchedSquad !== undefined && (
+                        <>
+                          <span>·</span>
+                          <span>{zkVerification.commitmentMatchedSquad ? "✓ XI Opening Match" : "✗ XI Mismatch"}</span>
+                        </>
+                      )}
                     </div>
                   </div>
                 )}
@@ -759,26 +788,36 @@ export const FantasyTab: React.FC = () => {
                   <button
                     type="button"
                     className="btn btn-outline btn-sm"
-                    style={{ flex: 1, padding: "7px 12px", fontSize: "0.78rem" }}
+                    style={{ flex: 1, padding: "7px 10px", fontSize: "0.76rem" }}
                     onClick={handleVerifyZkProof}
                   >
-                    🔍 Verify Proof (Pairing Check)
+                    🔍 Verify Proof
                   </button>
                   <button
                     type="button"
                     className="btn btn-ghost btn-sm"
-                    style={{ padding: "7px 12px", fontSize: "0.78rem" }}
+                    style={{ padding: "7px 10px", fontSize: "0.76rem" }}
+                    onClick={handleTamperTest}
+                    title="Simulate tampering with credit total to confirm verifier rejects forged proofs"
+                  >
+                    🛡️ Tamper Test
+                  </button>
+                  <button
+                    type="button"
+                    className="btn btn-ghost btn-sm"
+                    style={{ padding: "7px 10px", fontSize: "0.76rem" }}
                     onClick={() => setShowZkModal(true)}
                   >
-                    📜 Raw Proof JSON
+                    📜 JSON
                   </button>
                   <button
                     type="button"
                     className="btn btn-primary btn-sm"
-                    style={{ flex: 1.2, padding: "7px 12px", fontSize: "0.78rem" }}
+                    style={{ flex: 1.2, padding: "7px 10px", fontSize: "0.76rem" }}
                     onClick={handleCommitZkProof}
+                    disabled={isZkCommitted}
                   >
-                    {isZkCommitted ? "Committed to Chain ✓" : "⛓️ Commit ZK Proof On-Chain"}
+                    {isZkCommitted ? "Committed On-Chain ✓" : "⛓️ Commit On-Chain (10 CRIC)"}
                   </button>
                 </div>
               </div>

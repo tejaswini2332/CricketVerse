@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { useCricket } from "../context/CricketContext";
 import { generateSvgAvatar } from "../scoringEngine";
 
@@ -17,6 +17,14 @@ export const MarketplaceTab: React.FC = () => {
     userCollection.length > 0 ? userCollection[0].id : ""
   );
   const [priceInput, setPriceInput] = useState<number>(750);
+
+  useEffect(() => {
+    if (userCollection.length === 0) {
+      if (selectedCardId !== "") setSelectedCardId("");
+    } else if (!userCollection.some((p) => p.id === Number(selectedCardId))) {
+      setSelectedCardId(userCollection[0].id);
+    }
+  }, [userCollection, selectedCardId]);
 
   const handleListSubmit = (e: React.FormEvent) => {
     e.preventDefault();
