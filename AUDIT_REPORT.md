@@ -73,21 +73,18 @@ This document records selected contract behavior and local Hardhat gas measureme
 
 All gas measurements were captured on the Cancun EVM target using the `viaIR` Solidity compiler pipeline with 200 optimization runs:
 
-| Transaction Operation | Gas Used (Units) | Est. Cost (Polygon Amoy @ 30 Gwei) | Est. Cost (Ethereum L1 @ 30 Gwei, \$3000 ETH) | Efficiency vs L1 |
+| Transaction Operation | Gas Used (Units) | Est. Cost (Polygon Amoy @ 30 Gwei)| 
 | :--- | :--- | :--- | :--- | :--- |
-| **CRIC Token Transfer** | 34,432 | 0.00103 POL (\$0.0006) | 0.00103 ETH (\$3.10) | **99.98% Savings** |
-| **PlayerCardNFT Mint** | 96,812 | 0.00290 POL (\$0.0017) | 0.00290 ETH (\$8.71) | **99.98% Savings** |
-| **MatchTicketNFT Issue** | 284,795 | 0.00854 POL (\$0.0051) | 0.00854 ETH (\$25.63) | **99.98% Savings** |
-| **Turnstile Gate Check-in** | 80,299 | 0.00241 POL (\$0.0014) | 0.00241 ETH (\$7.23) | **99.98% Savings** |
-| **Marketplace List Ticket** | 259,060 | 0.00777 POL (\$0.0047) | 0.00777 ETH (\$23.32) | **99.98% Savings** |
-| **Marketplace Atomic Buy** | 151,243 | 0.00454 POL (\$0.0027) | 0.00454 ETH (\$13.61) | **99.98% Savings** |
-| **Oracle Fulfill Stats** | 71,180 | 0.00214 POL (\$0.0013) | 0.00214 ETH (\$6.41) | **99.98% Savings** |
-| **Tournament Create Escrow** | 212,978 | 0.00639 POL (\$0.0038) | 0.00639 ETH (\$19.17) | **99.98% Savings** |
-| **Tournament Join Escrow** | 206,906 | 0.00621 POL (\$0.0037) | 0.00621 ETH (\$18.62) | **99.98% Savings** |
-| **Tournament 95/5 Settlement** | 107,027 | 0.00321 POL (\$0.0019) | 0.00321 ETH (\$9.63) | **99.98% Savings** |
-
-> [!NOTE]
-> These are fee illustrations from test gas and assumed token/fee prices. They are not live fee quotes. The repository currently targets local Hardhat, so it has no measured Amoy transaction costs.
+| **CRIC Token Transfer** | 34,432 | 0.00103 POL (\$0.0006) | 
+| **PlayerCardNFT Mint** | 96,812 | 0.00290 POL (\$0.0017) |  
+| **MatchTicketNFT Issue** | 284,795 | 0.00854 POL (\$0.0051) | 
+| **Turnstile Gate Check-in** | 80,299 | 0.00241 POL (\$0.0014) | 
+| **Marketplace List Ticket** | 259,060 | 0.00777 POL (\$0.0047) | 
+| **Marketplace Atomic Buy** | 151,243 | 0.00454 POL (\$0.0027) | 
+| **Oracle Fulfill Stats** | 71,180 | 0.00214 POL (\$0.0013) |  
+| **Tournament Create Escrow** | 212,978 | 0.00639 POL (\$0.0038) | 
+| **Tournament Join Escrow** | 206,906 | 0.00621 POL (\$0.0037) | 
+| **Tournament 95/5 Settlement** | 107,027 | 0.00321 POL (\$0.0019) | 
 
 ---
 
