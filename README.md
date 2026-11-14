@@ -203,6 +203,12 @@ npm run chain:deploy
 # Starts Vite development server on port 3000
 npm run dev
 ```
+### How to Start Over from `0 CRIC` Anytime 
+Run this single command from the project root while the local Hardhat node is running:
+
+```bash
+node scripts/reset_user_wallet.js
+```
 Open **[http://localhost:3000](http://localhost:3000)** in your browser.
 
 ---
@@ -222,31 +228,6 @@ Open **[http://localhost:3000](http://localhost:3000)** in your browser.
      ```
    - Target test address: `0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266` (Loaded with 10,000 test ETH and $CRIC tokens).
 3. Alternatively, click **"Claim 50,000 CRIC"** and **"Get 20 demo ETH"** directly in the top header.
-
----
-
-## 🔄 Wallet Balance Persistence & Starting Over (Reset Guide)
-
-### Why does my balance stay (e.g. `49,014 CRIC`) when I reload the page?
-- When you click **Claim 50,000 CRIC**, `CRIC.sol` mints `50,000 CRIC` to your wallet (`0x4C349eBf4E712eA69f04C4F49bC15c6182d9aC37`) directly on the local Hardhat EVM node (`127.0.0.1:8545`).
-- Every purchase (such as minting a player card, buying from the auction room, buying a stadium pass, committing a ZK proof, or joining a tournament) executes a real on-chain `CRIC` transfer. Your resulting balance (e.g., `49,014 CRIC` after spending `986 CRIC`) is read live from the blockchain, so refreshing the browser keeps your exact on-chain balance as long as the Hardhat node stays running.
-
-### Will it reset to `0 CRIC` and show the claim buttons again on restart?
-- **Yes — when the Hardhat blockchain node itself restarts:** Local Hardhat (`npx hardhat node`) stores blockchain state in memory. Whenever you completely stop and restart the local Hardhat node (`127.0.0.1:8545`) or start a fresh environment, the contracts are re-deployed and the wallet starts back at `0.00 CRIC` and `0.5 ETH`, with both **"Claim 50,000 CRIC"** and **"Get 20 demo ETH"** restored in the header.
-- **Note on Vite Dev Server vs. Hardhat Node:** `vite.config.ts` spawns Hardhat as a detached background process, so simply restarting Vite or refreshing the browser will keep the existing Hardhat chain alive unless the Hardhat process itself is stopped or you run the reset command below.
-
-### How to Start Over from `0 CRIC` Anytime (Without Restarting the Server)
-Run this single command from the project root while the local Hardhat node is running:
-
-```bash
-node scripts/reset_user_wallet.js
-```
-
-**What this command does:**
-1. Transfers all remaining `CRIC` tokens from `0x4C349eBf4E712eA69f04C4F49bC15c6182d9aC37` back to the deployer treasury (`0.00 CRIC` balance).
-2. Advances the local Hardhat EVM block timestamp (`evm_increaseTime`) past the 1-hour `CRIC` faucet cooldown if you already claimed in this session.
-3. Resets your wallet's gas balance to `0.5 ETH`.
-4. After running it, your UI automatically updates (within a few seconds or on refresh) to `0.00 CRIC` with both **"Claim 50,000 CRIC"** and **"Get 20 demo ETH"** ready to claim again.
 
 ---
 
